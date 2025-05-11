@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom styles */
+.prose {
+  @apply max-w-none;
+}
+
+.prose pre {
+  @apply bg-gray-800 text-white p-4 rounded-md overflow-auto;
+}
+
+.prose code {
+  @apply text-sm;
+}
+
+.prose p {
+  @apply my-2;
+}
+
+.prose ul {
+  @apply list-disc pl-5 my-2;
+}
+
+.prose ol {
+  @apply list-decimal pl-5 my-2;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  @apply font-bold my-3;
+}
+
+.prose h1 {
+  @apply text-2xl;
+}
+
+.prose h2 {
+  @apply text-xl;
+}
+
+.prose h3 {
+  @apply text-lg;
+}
+
+.prose table {
+  @apply border-collapse table-auto w-full my-3;
+}
+
+.prose th {
+  @apply border px-4 py-2 text-left;
+}
+
+.prose td {
+  @apply border px-4 py-2;
+} 
