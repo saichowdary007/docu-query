@@ -10,10 +10,13 @@ DocuQuery is a RAG (Retrieval-Augmented Generation) chatbot that allows you to q
 - **SQL querying for tabular data**: Run SQL queries on CSV and Excel files
 - **Export functionality**: Export query results as Excel files
 - **Citation tracking**: All responses include citations to the source documents
+- **Named Entity Recognition**: Automatically extracts persons and sections from your documents
+- **Code-first tabular queries**: Bypasses the LLM for simple count/list operations on tabular data
+- **File-scoped queries**: Keep conversations context-bound to specific documents
 
 ## Tech Stack
 
-- **Backend**: FastAPI, DuckDB, Chroma, Google Gemini 2.0 Flash
+- **Backend**: FastAPI, DuckDB, Chroma, Google Gemini 2.0 Flash, spaCy NER
 - **Frontend**: React, Vite, Tailwind CSS
 - **Deployment**: Docker Compose
 
@@ -49,8 +52,12 @@ DocuQuery is a RAG (Retrieval-Augmented Generation) chatbot that allows you to q
 1. Upload your documents using the drag-and-drop interface
 2. Wait for the documents to be processed and indexed
 3. Ask questions about your documents in the chat interface
-4. For tabular data, you can use SQL queries by starting your message with "SELECT"
+4. For tabular data, you can:
+   - Ask natural language questions like "How many sales were made in Q1?"
+   - Use direct commands like "List all customers in New York"
+   - Use SQL queries by starting your message with "SELECT"
 5. To export data, ask for an export or use a SQL query and click the "Download Excel File" button
+6. For documents with named entities, you can ask "Who are the people mentioned in this document?"
 
 ## Development
 
@@ -62,6 +69,9 @@ docuquery/
 │   ├── Dockerfile
 │   ├── main.py
 │   ├── rag_core.py
+│   ├── response_generator.py
+│   ├── test_document_indexing.py
+│   ├── test_imports.py
 │   └── requirements.txt
 ├── frontend/
 │   ├── Dockerfile
@@ -85,6 +95,7 @@ To develop locally:
    ```bash
    cd backend
    pip install -r requirements.txt
+   python -m spacy download en_core_web_sm
    uvicorn main:app --reload
    ```
 
@@ -94,6 +105,23 @@ To develop locally:
    npm install
    npm run dev
    ```
+
+### Testing
+
+Run the test suite to verify functionality:
+
+```bash
+cd backend
+python -m unittest discover
+```
+
+## Recent Enhancements
+
+- **Row-level spreadsheet ingestion**: Each row is now individually indexed with its own metadata
+- **Named Entity Recognition**: Using spaCy to extract person names and document sections
+- **Code-first tabular queries**: Direct SQL generation for simple count/list operations
+- **File-scoped namespace**: Queries can now be limited to specific uploaded files
+- **Enhanced exports**: Improved Excel export functionality via the /export endpoint
 
 ## License
 

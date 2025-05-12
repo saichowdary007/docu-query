@@ -12,9 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install dependencies with explicit sentence-transformers installation
+# Install dependencies with optimized caching
 RUN pip install --no-cache-dir -U pip && \
+    # Install spaCy first with language model
+    pip install --no-cache-dir spacy==3.7.2 && \
+    python -m spacy download en_core_web_sm && \
+    # Install sentence transformers explicitly
     pip install --no-cache-dir sentence-transformers==2.2.2 && \
+    # Install remaining dependencies
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
