@@ -1,5 +1,10 @@
 # Environment variables
 .env
+*.env
+venv/
+.venv/
+venv311/
+myenv/
 
 # Python
 __pycache__/
