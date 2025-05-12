@@ -144,7 +144,7 @@ const FileDrop = ({ onUploadSuccess }) => {
               id="file-upload"
               onChange={handleChange}
               className="hidden"
-              accept=".pdf,.docx,.xlsx,.csv,.txt,.md,.html,.pptx"
+              accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.html,.pptx"
               disabled={uploading}
             />
             
@@ -167,8 +167,11 @@ const FileDrop = ({ onUploadSuccess }) => {
                 <p className="mb-2 text-sm text-gray-700">
                   <span className="font-semibold">Click to upload</span> or drag and drop
                 </p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Supported formats: PDF, DOCX, XLSX/XLS, CSV, TXT, MD, HTML, PPTX
+                </p>
                 <p className="text-xs text-gray-500">
-                  PDF, DOCX, XLSX, CSV, TXT, MD, HTML, PPTX
+                  <span className="font-semibold">Note:</span> For Excel files (.xls), modern Office formats (.xlsx) are recommended for better compatibility
                 </p>
               </>
             ) : (

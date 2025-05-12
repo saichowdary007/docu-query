@@ -168,7 +168,10 @@ const DocumentManager = ({ onUploadSuccess }) => {
                 <span className="text-gray-500">
                   Click to select a document or drag and drop
                   <p className="text-sm text-gray-400 mt-1">
-                    PDF, DOCX, XLSX, CSV, TXT, MD, PPTX
+                    PDF, DOCX, XLSX/XLS, CSV, TXT, MD, PPTX
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    <span className="font-semibold">Note:</span> For older Excel files (.xls), modern Office formats (.xlsx) are recommended for better compatibility
                   </p>
                 </span>
               )}

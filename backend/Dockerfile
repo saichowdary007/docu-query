@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
+    # Additional dependencies for Excel processing
+    libblas-dev \
+    liblapack-dev \
+    libatlas-base-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -19,6 +23,8 @@ RUN pip install --no-cache-dir -U pip && \
     python -m spacy download en_core_web_sm && \
     # Install sentence transformers explicitly
     pip install --no-cache-dir sentence-transformers==2.2.2 && \
+    # Install Excel-related packages explicitly
+    pip install --no-cache-dir xlrd==2.0.1 openpyxl==3.1.2 pyxlsb==1.0.10 && \
     # Install remaining dependencies
     pip install --no-cache-dir -r requirements.txt
 

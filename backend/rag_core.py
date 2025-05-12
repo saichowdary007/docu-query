@@ -9,37 +9,32 @@ from langchain_community.embeddings import HuggingFaceEmbeddings, FakeEmbeddings
 import pandas as pd
 from pathlib import Path
 import json
-import re
 import uuid
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import LLMChainExtractor
-from typing import Optional, Dict, Any, List
-
-# Import execute_sql_query from response_generator 
-from response_generator import execute_sql_query # This is fine if response_generator does not import rag_core
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Add spaCy for NER
+# Conditional import for spacy to avoid errors if not installed
 try:
-    import spacy # type: ignore # Imported conditionally - may not be installed
-    try:
-        nlp = spacy.load("en_core_web_sm")
-        spacy_available = True
-        logger.info("spaCy NER model loaded successfully")
-    except Exception as e:
-        spacy_available = False
-        logger.warning(f"Could not load spaCy model 'en_core_web_sm': {e}. NER features might be limited.")
-except ImportError:
+    import spacy # type: ignore
+    nlp = spacy.load("en_core_web_sm")
+    spacy_available = True
+    logger.info("spaCy NER model loaded successfully")
+except (ImportError, OSError) as e: # Catch OSError for model loading issues
     spacy_available = False
-    logger.warning("spaCy not available, NER features will be disabled")
+    nlp = None # Ensure nlp is defined
+    logger.warning(f"spaCy or en_core_web_sm model not available: {e}. NER features might be limited.")
+
 
 # Path to Chroma DB
 CHROMA_DB_PATH = os.environ.get("CHROMA_DB_PATH", "./chroma_db")
 logger.info(f"Using Chroma DB path: {CHROMA_DB_PATH}")
 
 # Initialize embeddings model
+embeddings: Any # Define type for embeddings
 try:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -53,7 +48,6 @@ try:
     else:
         try:
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            genai.configure(api_key=api_key) # type: ignore # genai from main.py import
             embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
             logger.info("Using Google Generative AI Embeddings model (models/embedding-001)")
         except Exception as google_error:
@@ -69,19 +63,33 @@ except Exception as e_init_error:
     embeddings = FakeEmbeddings(size=384)
 
 
+# --- DuckDB Connection Management ---
+# Initialize DuckDB connection - THIS IS THE SHARED CONNECTION
+# It's crucial that this is the *only* place where duckdb.connect(':memory:') is called
+# to ensure all operations use the same in-memory database.
+try:
+    shared_db_conn = duckdb.connect(database=":memory:", read_only=False)
+    logger.info("RAG Core: Shared DuckDB connection established to :memory:")
+except Exception as e:
+    logger.error(f"RAG Core: CRITICAL Error connecting to shared DuckDB: {e}")
+    # Depending on the application's needs, you might want to exit or use a fallback
+    # For now, we'll let it raise, as a non-functional DB is a major issue.
+    raise
+
+def get_shared_db_connection() -> duckdb.DuckDBPyConnection:
+    """Returns the shared DuckDB connection."""
+    global shared_db_conn
+    if shared_db_conn is None or shared_db_conn.closed: # Check if connection was closed
+        logger.warning("Shared DuckDB connection was closed or None. Re-initializing.")
+        shared_db_conn = duckdb.connect(database=":memory:", read_only=False)
+    return shared_db_conn
+# --- End DuckDB Connection Management ---
+
+
 # Initialize Chroma client - lazily in get_chroma_collection()
 chroma_client: Optional[chromadb.PersistentClient] = None
 collection_name = "docuquery"
 
-# Initialize DuckDB connection - THIS IS THE SHARED CONNECTION
-try:
-    # Using duckdb.connect(':memory:') creates/connects to the default in-memory database.
-    # Subsequent calls to duckdb.connect(':memory:') in the same process will connect to the *same* database.
-    db_conn = duckdb.connect(database=":memory:", read_only=False)
-    logger.info("RAG Core: Shared DuckDB connection established to :memory:")
-except Exception as e:
-    logger.error(f"RAG Core: Error connecting to shared DuckDB: {e}")
-    raise # Critical if DB can't be initialized
 
 def get_chroma_collection():
     """Get or create Chroma collection, ensuring client is initialized."""
@@ -90,22 +98,13 @@ def get_chroma_collection():
         if chroma_client is None:
             os.makedirs(CHROMA_DB_PATH, exist_ok=True)
             logger.info(f"Initializing Chroma client with path: {CHROMA_DB_PATH}")
-            # Added a setting to allow schema upgrades or handle inconsistencies, common with Chroma versions/restarts.
-            # For a persistent client, this can help if the DB exists but has issues.
-            # Note: chromadb.PersistentClient does not directly take http client settings like this.
-            # The Settings object is for HttpClient. For PersistentClient, it's simpler.
             try:
                 chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
                 logger.info("Chroma client initialized successfully.")
             except Exception as client_init_error:
                 logger.error(f"Error initializing Chroma PersistentClient: {client_init_error}")
-                # Attempt to clear and reinitialize if specific errors occur (e.g. locked DB, corruption)
-                # This is a drastic measure and should be used cautiously.
-                # For now, we'll just re-raise or return None.
                 return None
             
-        # Get or create collection using the initialized client
-        # The Langchain Chroma wrapper handles the embedding function association.
         langchain_chroma_collection = Chroma(
                 client=chroma_client,
                 collection_name=collection_name,
@@ -123,45 +122,40 @@ def get_chroma_collection():
 def extract_entities_and_sections(text: str, metadata: Optional[Dict[str, Any]] = None) -> tuple[Dict[str, List[str]], Dict[str, str]]:
     """Extract named entities (PERSON) and potential sections from text."""
     entities: Dict[str, List[str]] = {"PERSON": []}
-    sections: Dict[str, str] = {} # section_name: type (e.g. "markdown", "uppercase")
+    sections: Dict[str, str] = {} 
     
     if not text: return entities, sections
 
-    # Regex for sections (improved robustness)
     section_patterns = [
-        (r"^\s*#{1,6}\s+(.+?)\s*#*\s*$", "markdown"),  # Markdown headers (match full line)
-        (r"^\s*([A-Z0-9][A-Z0-9\s]{3,48}[A-Z0-9])\s*(?::|\n)", "uppercase"), # All caps (4-50 chars), ends with : or newline
-        (r"^\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,5})\s*:", "title_case_colon") # Title Case up to 6 words, ends with :
+        (r"^\s*#{1,6}\s+(.+?)\s*#*\s*$", "markdown"),
+        (r"^\s*([A-Z0-9][A-Z0-9\s]{3,48}[A-Z0-9])\s*(?::|\n)", "uppercase"),
+        (r"^\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,5})\s*:", "title_case_colon")
     ]
-    for line in text.splitlines(): # Process line by line for section headers
+    for line in text.splitlines():
         for pattern, p_type in section_patterns:
             match = re.match(pattern, line.strip())
             if match:
                 section_name = match.group(1).strip()
-                if section_name and 2 < len(section_name) < 100: # Basic sanity check
+                if section_name and 2 < len(section_name) < 100:
                     sections[section_name] = p_type
-                    break # Found a section header on this line
+                    break 
 
-    if not spacy_available:
-        # Basic regex for PERSON if spaCy not available (primarily for resumes)
+    if not spacy_available or nlp is None: # Check if nlp is loaded
         if metadata and ("resume" in metadata.get("source", "").lower() or "cv" in metadata.get("source", "").lower()):
-            # Try to find name-like patterns at the beginning of the text
-            for line in text.split('\n')[:5]: # Check first 5 lines
-                # Pattern for "First Last" or "First M. Last"
+            for line in text.split('\n')[:5]: 
                 name_match = re.match(r"^\s*([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]*\.?){1,3})\s*$", line.strip())
                 if name_match:
                     potential_name = name_match.group(1).strip()
-                    if len(potential_name.split()) >= 2: # At least two parts to the name
+                    if len(potential_name.split()) >= 2:
                         entities["PERSON"].append(potential_name)
-                        break # Found a name
+                        break 
         return entities, sections
 
     try:
         doc_spacy = nlp(text)
         for ent in doc_spacy.ents:
             if ent.label_ == "PERSON" and ent.text.strip() not in entities["PERSON"]:
-                # Filter out very short or generic "PERSON" entities if needed
-                if len(ent.text.strip().split()) > 1 and len(ent.text.strip()) > 3: # e.g. "John Doe", not "X" or "Dr"
+                if len(ent.text.strip().split()) > 1 and len(ent.text.strip()) > 3:
                      entities["PERSON"].append(ent.text.strip())
     except Exception as e_spacy:
         logger.warning(f"Error during spaCy entity extraction: {e_spacy}")
@@ -171,64 +165,81 @@ def extract_entities_and_sections(text: str, metadata: Optional[Dict[str, Any]] 
 
 def register_duckdb_table(df: pd.DataFrame, table_name_base: str) -> Optional[str]:
     """Register a pandas DataFrame as a DuckDB table using the shared db_conn."""
-    global db_conn # Use the shared connection from rag_core
+    db_conn = get_shared_db_connection() # Get the shared connection
+    sanitized_name = table_name_base # Initialize for logging in case of early failure
     try:
-        # Sanitize table name: ensure it's a valid SQL identifier
-        # Replace non-alphanumeric with underscore, ensure starts with letter or underscore
         sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', table_name_base)
-        if not re.match(r'^[a-zA-Z_]', sanitized_name): # Must start with letter or underscore
+        if not re.match(r'^[a-zA-Z_]', sanitized_name):
             sanitized_name = "_" + sanitized_name
         
-        # Ensure name is not a SQL keyword (basic check)
-        if sanitized_name.upper() in ["SELECT", "TABLE", "FROM", "WHERE"]: # Add more if needed
+        # Basic SQL keyword check
+        sql_keywords = {"SELECT", "TABLE", "FROM", "WHERE", "UPDATE", "DELETE", "INSERT", "CREATE", "ALTER", "DROP", "INDEX", "VIEW"}
+        if sanitized_name.upper() in sql_keywords:
             sanitized_name += "_data"
+        
+        # Check if table already exists with this name to avoid errors or silent replacement
+        # Depending on desired behavior, you might want to rename, drop, or skip.
+        # For now, let's make it unique if it exists to avoid conflicts.
+        temp_sanitized_name = sanitized_name
+        counter = 1
+        existing_tables_df = db_conn.execute("SHOW TABLES").fetchdf()
+        existing_tables = list(existing_tables_df['name']) if not existing_tables_df.empty else []
 
-        # Handle non-serializable data types for DuckDB compatibility if any remain
+        while temp_sanitized_name in existing_tables:
+            logger.warning(f"Table '{temp_sanitized_name}' already exists. Attempting to rename.")
+            temp_sanitized_name = f"{sanitized_name}_{counter}"
+            counter += 1
+        sanitized_name = temp_sanitized_name
+
+
+        # Data type sanitization for DuckDB
         for col in df.columns:
-            # Convert object columns that might contain problematic types (e.g. complex objects) to string
             if df[col].dtype.name == 'object':
+                # Attempt to convert mixed-type object columns more carefully
                 try:
-                    # A quick check if it's mostly simple types; this isn't foolproof
-                    if any(isinstance(x, (list, dict, set)) for x in df[col].dropna().head()):
+                    # If all non-NaN are strings, keep as string
+                    if all(isinstance(x, str) for x in df[col].dropna()):
+                        pass # Already suitable or will be cast by astype(str) if needed
+                    # If it contains lists, dicts, or other complex objects, convert to string
+                    elif any(isinstance(x, (list, dict, set)) for x in df[col].dropna()):
                         df[col] = df[col].astype(str)
-                except Exception: # Broad except if introspection fails
+                        logger.info(f"Converted complex object column '{col}' to string for DuckDB.")
+                except Exception as e: # Broad exception if introspection fails
+                     logger.warning(f"Could not reliably inspect object column '{col}', converting to string. Error: {e}")
                      df[col] = df[col].astype(str)
-            # Timestamps with timezone can be problematic; DuckDB prefers naive or UTC
+            
             if pd.api.types.is_datetime64_any_dtype(df[col]) and getattr(df[col].dt, 'tz', None) is not None:
                 try:
-                    df[col] = df[col].dt.tz_convert(None) # Convert to timezone-naive
+                    df[col] = df[col].dt.tz_localize(None) # Convert to timezone-naive by removing tz info
                     logger.info(f"Converted timezone-aware column '{col}' to naive for DuckDB.")
+                except TypeError: # Already naive
+                    pass
                 except Exception as tz_err:
                     logger.warning(f"Could not convert timezone for column '{col}': {tz_err}. Converting to string.")
                     df[col] = df[col].astype(str)
         
         db_conn.register(sanitized_name, df)
-        # Verify registration
         result = db_conn.execute(f"SELECT COUNT(*) FROM \"{sanitized_name}\"").fetchone()
-        if result is None: # Should not happen if register didn't throw error
-            logger.error(f"Failed to verify table registration for '{sanitized_name}' (count returned None)")
+        if result is None or result[0] != len(df): # Check count matches DataFrame length
+            logger.error(f"Failed to verify table registration for '{sanitized_name}' (count mismatch or None)")
             return None
         logger.info(f"Successfully registered table '{sanitized_name}' with {result[0]} rows in shared DuckDB.")
         return sanitized_name
             
     except Exception as e:
-        logger.error(f"Error registering DuckDB table '{table_name_base}' (sanitized to '{sanitized_name if 'sanitized_name' in locals() else ''}'): {e}")
+        logger.error(f"Error registering DuckDB table '{table_name_base}' (sanitized to '{sanitized_name}'): {e}")
         import traceback
         logger.error(traceback.format_exc())
         return None
 
 def embed(documents: List[Document], file_id: str) -> int:
-    """
-    Process documents (enrich metadata) and add them to Chroma vector store.
-    Assumes documents have 'source' and 'file_type' in metadata from load_xxx functions.
-    """
+    """Process documents (enrich metadata) and add them to Chroma vector store."""
     try:
         logger.info(f"Embedding: Processing {len(documents)} documents for file_id: {file_id}")
         if not documents:
             logger.warning(f"Embedding: No documents provided for file_id: {file_id}")
             return 0
             
-        total_chunks_embedded = 0
         valid_documents_for_chroma = []
         
         for i, doc in enumerate(documents):
@@ -238,26 +249,21 @@ def embed(documents: List[Document], file_id: str) -> int:
                 continue
                 
             if not hasattr(doc, 'metadata') or doc.metadata is None:
-                doc.metadata = {} # Initialize metadata if missing
+                doc.metadata = {}
             
-            # Ensure file_id is consistently set
             doc.metadata['file_id'] = file_id
             
-            # Enrich with entities and sections (persons, sections)
-            # extract_entities_and_sections expects metadata for context (e.g. filename for resume name extraction)
             entities, sections_dict = extract_entities_and_sections(doc.page_content, doc.metadata)
-            doc.metadata['persons'] = entities.get("PERSON", []) # List of person names
-            doc.metadata['sections'] = list(sections_dict.keys()) # List of section names
+            doc.metadata['persons'] = entities.get("PERSON", [])
+            doc.metadata['sections'] = list(sections_dict.keys())
 
-            # Sanitize metadata for Chroma: values must be str, int, float, bool, or None
-            # ChromaDB has specific limitations on metadata types.
             sanitized_meta = {}
             for k, v in doc.metadata.items():
                 if isinstance(v, (str, int, float, bool)) or v is None:
                     sanitized_meta[k] = v
-                elif isinstance(v, list): # Allow lists of simple types
-                    sanitized_meta[k] = [str(item) if not isinstance(item, (str, int, float, bool)) else item for item in v]
-                else: # Convert other types to string
+                elif isinstance(v, list): 
+                    sanitized_meta[k] = [str(item) if not isinstance(item, (str, int, float, bool, type(None))) else item for item in v]
+                else: 
                     sanitized_meta[k] = str(v)
             doc.metadata = sanitized_meta
             
@@ -272,13 +278,7 @@ def embed(documents: List[Document], file_id: str) -> int:
             logger.error(f"Embedding: Failed to get Chroma collection for file_id: {file_id}. Documents not embedded.")
             return 0
         
-        # Add documents to Chroma in batches if necessary (though Langchain wrapper might handle this)
-        # For large number of docs, consider batching:
-        # batch_size = 100 
-        # for i in range(0, len(valid_documents_for_chroma), batch_size):
-        #    batch = valid_documents_for_chroma[i:i + batch_size]
-        #    collection.add_documents(batch)
-        #    total_chunks_embedded += len(batch)
+        # Consider batching for very large lists of documents
         collection.add_documents(valid_documents_for_chroma)
         total_chunks_embedded = len(valid_documents_for_chroma)
         logger.info(f"Embedding: Successfully added {total_chunks_embedded} chunks to Chroma for file_id: {file_id}")
@@ -291,30 +291,71 @@ def embed(documents: List[Document], file_id: str) -> int:
         logger.error(traceback.format_exc())
         return 0
 
+def execute_sql_query_rag(query: str) -> Dict[str, Any]:
+    """Execute a SQL query against the shared DuckDB in-memory database.
+       This function is intended to be called from rag_core or by modules
+       that have access to the shared DB connection via get_shared_db_connection().
+    """
+    db_conn = get_shared_db_connection()
+    try:
+        logger.info(f"RAG Core executing SQL: {query}")
+        query_result = db_conn.execute(query)
+        result_data = query_result.fetchall()
+        columns = [desc[0] for desc in query_result.description]
+        
+        output_data = [dict(zip(columns, row)) for row in result_data]
+
+        logger.info(f"SQL query '{query}' executed by RAG core returned {len(output_data)} results.")
+        return {
+            "type": "sql_result",
+            "data": output_data,
+            "query": query,
+            "columns": columns
+        }
+    except Exception as e:
+        logger.error(f"RAG Core SQL Error for query '{query}': {str(e)}")
+        error_msg = str(e)
+        suggestion = ""
+        
+        missing_table_match = re.search(r"Table with name (\w+|\".*?\") does not exist", error_msg, re.IGNORECASE)
+        if not missing_table_match:
+            missing_table_match = re.search(r"Catalog Error: Table with name (.*?) does not exist!", error_msg, re.IGNORECASE)
+
+        if missing_table_match:
+            missing_table = missing_table_match.group(1).replace("\"", "")
+            try:
+                tables_fetch_df = db_conn.execute("SHOW TABLES").fetchdf()
+                available_tables = list(tables_fetch_df['name']) if not tables_fetch_df.empty else []
+                if available_tables:
+                    suggestion = f" Did you mean one of these? {', '.join(available_tables)}."
+                else:
+                    suggestion = " No tables are currently registered in the shared DB. Try uploading a CSV or Excel file."
+            except Exception as list_table_err:
+                logger.error(f"Could not list tables for error suggestion: {list_table_err}")
+            error_msg = f"Table '{missing_table}' not found.{suggestion}"
+        
+        return {
+            "type": "error",
+            "message": f"SQL Error: {error_msg}",
+            "query": query
+        }
 
 def original_retrieve(query: str, k=5, metadata_filter=None):
     """Original retrieve function - retrieves relevant documents or execute SQL query"""
     try:
         logger.info(f"Retrieval: Processing query: '{query}' with filter: {metadata_filter}")
         
-        # Direct SQL execution if query looks like SQL
-        # A more robust check might involve a simple SQL parser or more keywords.
         if query.strip().lower().startswith("select") and " from " in query.lower():
-            logger.info("Retrieval: Query identified as SQL, executing directly.")
-            return execute_sql_query(query) # Uses response_generator's execute_sql_query
+            logger.info("Retrieval: Query identified as SQL, executing directly via RAG core.")
+            return execute_sql_query_rag(query) # Use the RAG core's SQL executor
         
         collection = get_chroma_collection()
         if collection is None:
             logger.error("Retrieval: Failed to get Chroma collection.")
             return {"type": "error", "message": "Failed to access vector database"}
         
-        # Similarity search
-        # The filter in ChromaDB should be a dict e.g. {"file_id": "some_id"}
         docs = collection.similarity_search(query=query, k=k, filter=metadata_filter)
         logger.info(f"Retrieval: Similarity search returned {len(docs)} documents.")
-        
-        # (Optional) Add hints about SQL if tabular data is found (already handled well in main.py's chat endpoint)
-        # For example, if docs contain metadata indicating they are from tables.
         
         return {"type": "documents", "data": docs}
         
@@ -327,7 +368,6 @@ def original_retrieve(query: str, k=5, metadata_filter=None):
 def retrieve_with_compression(query: str, metadata_filter: Optional[Dict[str, Any]] = None, k: int = 5) -> Dict[str, Any]:
     """Enhanced retrieval with contextual compression."""
     try:
-        # Get more documents initially for better compression context
         initial_k = k * 2 
         result = original_retrieve(query, k=initial_k, metadata_filter=metadata_filter)
         
@@ -338,33 +378,24 @@ def retrieve_with_compression(query: str, metadata_filter: Optional[Dict[str, An
         docs = result["data"]
         logger.info(f"Compression: Retrieved {len(docs)} documents for potential compression.")
         
-        # Initialize LLM for compression
         comp_llm = None
-        if os.getenv("GOOGLE_API_KEY"):
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if api_key:
             from langchain_google_genai import ChatGoogleGenerativeAI
             comp_llm = ChatGoogleGenerativeAI(
-                model="gemini-pro", # Using gemini-pro for compression tasks
-                temperature=0, # Low temperature for factual extraction
-                google_api_key=os.getenv("GOOGLE_API_KEY")
+                model="gemini-pro", 
+                temperature=0,
+                google_api_key=api_key
             )
             logger.info("Compression: Using Google Gemini-Pro for LLMChainExtractor.")
         else:
-            # Fallback for compression if no API key (might be less effective)
-            # A simple keyword-based filter could be an alternative here.
-            # For now, FakeListLLM means compression might not change much.
             from langchain_core.language_models.fake import FakeListLLM
-            comp_llm = FakeListLLM(responses=["No specific relevant context found."]) # More neutral fake response
+            comp_llm = FakeListLLM(responses=["No specific relevant context found."]) 
             logger.warning("Compression: No Google API key. LLMChainExtractor using FakeListLLM; compression may be limited.")
         
         compressor = LLMChainExtractor.from_llm(comp_llm)
         
-        # Base retriever from the initially retrieved documents
-        from langchain.retrievers import ContextualCompressionRetriever, DocumentCompressorPipeline
-        from langchain_community.document_transformers import EmbeddingsRedundantFilter
-        from langchain.retrievers.document_compressors import DocumentCompressorPipeline
-        
-        # Simple retriever from the list of docs
-        from langchain.schema import BaseRetriever
+        from langchain.schema import BaseRetriever # Moved import here
         class ListRetriever(BaseRetriever):
             documents: List[Document]
             def _get_relevant_documents(self, query: str, *, run_manager=None) -> List[Document]:
@@ -382,29 +413,25 @@ def retrieve_with_compression(query: str, metadata_filter: Optional[Dict[str, An
         compressed_docs = compression_retriever.get_relevant_documents(query)
         logger.info(f"Compression: Retrieved {len(compressed_docs)} compressed documents.")
         
-        final_docs = compressed_docs if compressed_docs else docs # Fallback if compression yields nothing
-        return {"type": "documents", "data": final_docs[:k]} # Return up to k documents
+        final_docs = compressed_docs if compressed_docs else docs 
+        return {"type": "documents", "data": final_docs[:k]}
             
     except Exception as compression_error:
         logger.warning(f"Error during document compression: {compression_error}. Falling back to standard retrieval.")
-        # Fallback to original retrieve without compression if compression itself fails
         return original_retrieve(query, k=k, metadata_filter=metadata_filter)
 
 def retrieve(query: str, k=5, metadata_filter=None):
     """Main retrieval function, attempting compression if feasible."""
     if query.strip().lower().startswith("select") and " from " in query.lower():
-        logger.info("Retrieve: SQL query detected. Using original_retrieve.")
-        return original_retrieve(query, k, metadata_filter) # SQL queries go directly
+        logger.info("Retrieve: SQL query detected. Using original_retrieve (which calls RAG SQL executor).")
+        return original_retrieve(query, k, metadata_filter)
     
-    # Feature flag for compression (e.g., from env var or config)
-    use_compression = bool(os.getenv("GOOGLE_API_KEY")) # Only use compression if LLM is available
-    # use_compression = True # Forcing for test
+    use_compression = bool(os.getenv("GOOGLE_API_KEY"))
 
     if use_compression:
         logger.info("Retrieve: Attempting retrieval with compression.")
         try:
             comp_result = retrieve_with_compression(query, metadata_filter, k)
-            # Check if compression returned usable results
             if comp_result["type"] == "documents" and comp_result.get("data"):
                 return comp_result
             else:
@@ -412,6 +439,6 @@ def retrieve(query: str, k=5, metadata_filter=None):
         except Exception as e:
             logger.error(f"Retrieve: Error in retrieve_with_compression: {e}. Falling back.")
     else:
-        logger.info("Retrieve: Compression not enabled (e.g. no API key). Using standard retrieval.")
+        logger.info("Retrieve: Compression not enabled. Using standard retrieval.")
     
-    return original_retrieve(query, k, metadata_filter) # Fallback
+    return original_retrieve(query, k, metadata_filter)
