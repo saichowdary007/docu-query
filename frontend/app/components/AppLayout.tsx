@@ -4,6 +4,7 @@ import { DocumentTextIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/solid'
 import { useTheme } from 'next-themes'
 import { motion } from 'framer-motion'
+import { BorderBeam } from './ui/border-beam'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -26,7 +27,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen h-screen flex flex-col bg-gray-50 dark:bg-black">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-950 shadow-sm border-b border-gray-200 dark:border-gray-800">
+      <header className="relative bg-white dark:bg-gray-950 shadow-sm border-b border-gray-200 dark:border-gray-800 overflow-hidden">
+        <BorderBeam 
+          size={60}
+          duration={12} 
+          colorFrom="#3B82F6" 
+          colorTo="#8B5CF6"
+        />
         <div className="w-full px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">

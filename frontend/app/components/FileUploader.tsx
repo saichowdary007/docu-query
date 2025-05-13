@@ -4,6 +4,9 @@ import { useDropzone } from 'react-dropzone'
 import { CloudArrowUpIcon, DocumentIcon, CheckCircleIcon, XCircleIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { DocumentTextIcon, DocumentChartBarIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import { BorderBeam } from './ui/border-beam'
+import { apiUrls, getApiKey } from '../lib/api'
+import { useFiles } from '../lib/contexts'
 
 interface UploadedFile {
   name: string
@@ -12,7 +15,7 @@ interface UploadedFile {
   progress?: number
 }
 
-interface StoredFile {
+export interface StoredFile {
   filename: string
   type: string
   is_structured: boolean
@@ -20,36 +23,34 @@ interface StoredFile {
 
 export default function FileUploader() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
-  const [storedFiles, setStoredFiles] = useState<StoredFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingFiles, setDeletingFiles] = useState<string[]>([])
+  const { files, activeFile, setActiveFile, fetchFiles, deleteFile } = useFiles()
 
-  // Fetch stored files on component mount and after uploads
-  const fetchStoredFiles = async () => {
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-      const response = await fetch('http://localhost:8000/api/v1/files/uploaded-files', {
-        method: 'GET',
-        headers: {
-          'X-API-KEY': apiKey,
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStoredFiles(data.files || [])
-      }
-    } catch (error) {
-      console.error('Error fetching stored files:', error)
-    }
+  const clearSuccessfulUploads = () => {
+    setUploadedFiles(prev => prev.filter(file => file.status !== 'success'))
   }
 
-  useEffect(() => {
-    fetchStoredFiles()
-    // Set up polling to refresh file list every 30 seconds
-    const interval = setInterval(fetchStoredFiles, 30000)
-    return () => clearInterval(interval)
-  }, [])
+  const handleDeleteFile = async (e: React.MouseEvent, filename: string) => {
+    e.stopPropagation() // Prevent selecting the file when clicking delete
+    
+    // Show loading state
+    setDeletingFiles(prev => [...prev, filename])
+    
+    try {
+      const success = await deleteFile(filename)
+      if (success) {
+        // Deletion handled by the context
+        // Force refresh files after a short delay to ensure backend processing is complete
+        setTimeout(() => {
+          fetchFiles()
+        }, 300)
+      }
+    } finally {
+      // Remove loading state
+      setDeletingFiles(prev => prev.filter(f => f !== filename))
+    }
+  }
 
   const simulateProgress = (fileName: string) => {
     let progress = 0
@@ -92,12 +93,10 @@ export default function FileUploader() {
       formData.append('files', file)
     })
 
-    const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-    console.log('Using API Key:', apiKey ? 'API key is set' : 'API key is NOT set')
+    const apiKey = getApiKey()
 
     try {
-      // Use correct URL that works from the browser
-      const response = await fetch('http://localhost:8000/api/v1/files/upload', {
+      const response = await fetch(apiUrls.fileUpload, {
         method: 'POST',
         headers: {
           'X-API-KEY': apiKey,
@@ -105,8 +104,6 @@ export default function FileUploader() {
         body: formData,
       })
 
-      console.log('Upload response status:', response.status)
-      
       // Clear progress intervals
       intervals.forEach(clearInterval)
       
@@ -117,7 +114,6 @@ export default function FileUploader() {
       }
 
       const data = await response.json()
-      console.log('Upload success response:', data)
       
       // Update status for successfully processed files
       setUploadedFiles(prev => prev.map(file => {
@@ -131,8 +127,11 @@ export default function FileUploader() {
         return file
       }))
 
-      // Refresh stored files list after successful upload
-      await fetchStoredFiles()
+      // Refresh files in context
+      fetchFiles()
+      
+      // Auto-clear successful uploads after 5 seconds
+      setTimeout(clearSuccessfulUploads, 5000)
     } catch (error) {
       console.error('Upload error:', error)
       // Clear progress intervals
@@ -146,37 +145,7 @@ export default function FileUploader() {
     } finally {
       setIsUploading(false)
     }
-  }, [isUploading])
-
-  const handleDeleteFile = async (filename: string) => {
-    if (isDeleting) return
-    
-    setIsDeleting(true)
-    const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-    
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/files/delete/${filename}`, {
-        method: 'DELETE',
-        headers: {
-          'X-API-KEY': apiKey,
-        },
-      })
-
-      if (response.ok) {
-        // Remove file from the stored files list
-        setStoredFiles(prev => prev.filter(file => file.filename !== filename))
-        
-        // Also remove from upload history if present
-        setUploadedFiles(prev => prev.filter(file => file.name !== filename))
-      } else {
-        console.error('Error deleting file:', await response.text())
-      }
-    } catch (error) {
-      console.error('Delete error:', error)
-    } finally {
-      setIsDeleting(false)
-    }
-  }
+  }, [isUploading, fetchFiles])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -191,6 +160,19 @@ export default function FileUploader() {
       'application/vnd.ms-excel': ['.xls'],
     },
   })
+
+  const getStatusIcon = (status: UploadedFile['status']) => {
+    switch (status) {
+      case 'uploading':
+        return <div className="h-5 w-5 text-blue-500 dark:text-blue-400 animate-pulse rounded-full bg-blue-100 dark:bg-blue-900/50"></div>
+      case 'success':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500 dark:text-green-400" />
+      case 'error':
+        return <XCircleIcon className="h-5 w-5 text-red-500 dark:text-red-400" />
+      default:
+        return <DocumentIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+    }
+  }
 
   const getFileIcon = (type: string, isStructured: boolean = false) => {
     if (isStructured) {
@@ -215,62 +197,115 @@ export default function FileUploader() {
     }
   }
 
-  const getStatusIcon = (status: UploadedFile['status']) => {
-    switch (status) {
-      case 'uploading':
-        return <div className="h-5 w-5 text-blue-500 dark:text-blue-400 animate-pulse rounded-full bg-blue-100 dark:bg-blue-900/50"></div>
-      case 'success':
-        return <CheckCircleIcon className="h-5 w-5 text-green-500 dark:text-green-400" />
-      case 'error':
-        return <XCircleIcon className="h-5 w-5 text-red-500 dark:text-red-400" />
-      default:
-        return <DocumentIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-    }
-  }
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="bg-white dark:bg-gray-950 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 h-full flex flex-col transition-colors duration-200 w-full"
+      className="relative bg-white dark:bg-gray-950 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 h-full flex flex-col transition-colors duration-200 w-full overflow-hidden"
     >
+      <BorderBeam
+        size={80}
+        duration={10}
+        colorFrom="#34D399" 
+        colorTo="#3B82F6"
+      />
+      
       <div className="p-4 border-b border-gray-200 dark:border-gray-800">
         <h2 className="text-lg font-medium text-gray-800 dark:text-gray-100 flex items-center">
           <CloudArrowUpIcon className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
-          Upload Documents
+          Document Manager
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Drag & drop or click to upload files
+          Upload new files or select existing documents
         </p>
       </div>
       
       <div className="p-4 flex-1 overflow-auto flex flex-col">
-        {/* Dropzone */}
-        <div
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
-            isDragActive 
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-              : 'border-gray-300 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500'
-          }`}
-        >
-          <input {...getInputProps()} />
-          <CloudArrowUpIcon className={`h-10 w-10 mx-auto mb-2 ${
-            isDragActive 
-              ? 'text-blue-500 dark:text-blue-400' 
-              : 'text-gray-400 dark:text-gray-500'
-          }`} />
-          {isDragActive ? (
-            <p className="text-blue-500 dark:text-blue-400 font-medium">Drop the files here...</p>
-          ) : (
-            <div>
-              <p className="text-gray-600 dark:text-gray-300">Drag & drop files here, or click to select files</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                Supported: PDF, DOCX, PPTX, TXT, MD, CSV, XLSX, XLS
-              </p>
+        {/* File Selector Section */}
+        {files.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
+              Available Documents
+              <span className="ml-2 text-xs text-gray-500 dark:text-gray-400 font-normal">
+                (Select a file to chat with)
+              </span>
+            </h3>
+            <div className="bg-white dark:bg-gray-950 rounded-md p-2 shadow-sm mb-2 border border-gray-200 dark:border-gray-800">
+              <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                {files.map((file) => (
+                  <motion.div
+                    key={file.filename}
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => {
+                      console.log("User selected file:", file.filename);
+                      setActiveFile(file.filename);
+                    }}
+                    className={`flex items-center p-2 rounded-md cursor-pointer ${
+                      activeFile === file.filename
+                        ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-900 border border-transparent'
+                    }`}
+                  >
+                    <div className="mr-2">{getFileIcon(file.type, file.is_structured)}</div>
+                    <div className="flex-1 truncate text-sm text-gray-700 dark:text-gray-300">
+                      {file.filename}
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={(e) => handleDeleteFile(e, file.filename)}
+                      disabled={deletingFiles.includes(file.filename)}
+                      className={`ml-2 p-1 rounded-full ${
+                        deletingFiles.includes(file.filename)
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'text-gray-400 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                      title="Delete file"
+                    >
+                      {deletingFiles.includes(file.filename) ? (
+                        <div className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-700 border-t-transparent animate-spin"></div>
+                      ) : (
+                        <TrashIcon className="h-5 w-5" />
+                      )}
+                    </motion.button>
+                  </motion.div>
+                ))}
+              </div>
             </div>
-          )}
+          </div>
+        )}
+
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
+            Upload New Files
+          </h3>
+          {/* Dropzone */}
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
+              isDragActive 
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                : 'border-gray-300 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <CloudArrowUpIcon className={`h-10 w-10 mx-auto mb-2 ${
+              isDragActive 
+                ? 'text-blue-500 dark:text-blue-400' 
+                : 'text-gray-400 dark:text-gray-500'
+            }`} />
+            {isDragActive ? (
+              <p className="text-blue-500 dark:text-blue-400 font-medium">Drop the files here...</p>
+            ) : (
+              <div>
+                <p className="text-gray-600 dark:text-gray-300">Drag & drop files here, or click to select files</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Supported: PDF, DOCX, PPTX, TXT, MD, CSV, XLSX, XLS
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Current Upload Status */}
@@ -321,51 +356,14 @@ export default function FileUploader() {
           </div>
         )}
 
-        {/* Stored Files List with Delete Buttons */}
-        <div className="flex-1 min-h-0">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Available Files</h3>
-          {storedFiles.length === 0 ? (
-            <div className="text-center py-8 border border-gray-200 dark:border-gray-800 rounded-md bg-gray-50 dark:bg-black">
-              <DocumentIcon className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500" />
-              <p className="text-gray-500 dark:text-gray-400 mt-2">No files available</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Upload files to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-1 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-md divide-y divide-gray-100 dark:divide-gray-900">
-              {storedFiles.map((file, index) => (
-                <motion.div
-                  key={file.filename}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: index * 0.05 }}
-                  className="flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-900"
-                >
-                  <div className="flex items-center flex-1 min-w-0">
-                    <span className="mr-2">{getFileIcon(file.type, file.is_structured)}</span>
-                    <span className="truncate text-sm text-gray-700 dark:text-gray-300" title={file.filename}>
-                      {file.filename}
-                    </span>
-                    {file.is_structured && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                        Data
-                      </span>
-                    )}
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => handleDeleteFile(file.filename)}
-                    disabled={isDeleting}
-                    className="ml-2 p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
-                    title="Delete file"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </motion.button>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Upload Complete Message */}
+        {!isUploading && uploadedFiles.some(file => file.status === 'success') && (
+          <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+            <p className="text-green-700 dark:text-green-400 text-sm">
+              Files uploaded successfully! Select a file above to start chatting.
+            </p>
+          </div>
+        )}
       </div>
     </motion.div>
   )

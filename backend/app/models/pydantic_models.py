@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, description="User's natural language query")
+    file_context: Optional[str] = Field(default=None, description="Specific file to query against")
     # session_id: Optional[str] = None # For session management if needed
 
 class QueryResponse(BaseModel):
@@ -14,12 +15,16 @@ class QueryResponse(BaseModel):
     download_filename: Optional[str] = Field(default=None, description="Filename for downloadable content")
     # For enabling download, we need original file context and query params that generated the table
     file_context: Optional[str] = Field(default=None, description="Original filename for context if data is from a structured file")
-    query_params_for_download: Optional[Dict] = Field(default=None, description="Query parameters that generated this downloadable table")
+    query_params_for_download: Optional[Union[Dict, List[Dict]]] = Field(default=None, description="Query parameters that generated this downloadable table (either a single condition or list of conditions)")
     sheet_name_for_download: Optional[str] = Field(default=None, description="Sheet name, if applicable, for downloadable table")
+    drop_duplicates_for_download: Optional[bool] = Field(default=False, description="Whether to drop duplicate rows in the downloaded file")
+    subset_for_download: Optional[List[str]] = Field(default=None, description="List of columns to consider when removing duplicates")
     sources: Optional[str] = None # For RAG source documents
 
 class FileProcessRequest(BaseModel):
     filename_to_download: str # e.g. "filtered_data.xlsx"
     original_filename: str # e.g. "source_data.xlsx"
-    query_params: Dict # The query params that generated the filtered data
+    query_params: Union[Dict, List[Dict]] # The query params that generated the filtered data (either a single condition or list of conditions)
     sheet_name: Optional[str] = None
+    drop_duplicates: Optional[bool] = Field(default=False, description="Whether to drop duplicate rows")
+    subset: Optional[List[str]] = Field(default=None, description="List of columns to consider when removing duplicates")

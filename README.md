@@ -22,6 +22,8 @@ A powerful document query system that combines RAG (Retrieval-Augmented Generati
   - Drag-and-drop file upload
   - Interactive data visualization
   - Responsive design
+  - Modern UI animations with Magic UI components
+  - Premium shine border effects
 
 ## Tech Stack
 
@@ -149,3 +151,40 @@ MIT License - see LICENSE file for details.
 - Google Vertex AI for ML capabilities
 - FastAPI for the robust backend
 - Next.js team for the frontend framework
+
+## UI Components
+
+The application uses custom Magic UI components to create a premium look and feel:
+
+### BorderBeam Component
+
+The BorderBeam component adds a beautiful animated shine effect to containers, creating a premium border animation that draws attention to important UI elements. Used in:
+
+- Chat interface
+- File uploader
+- Application header
+
+To use the BorderBeam component:
+
+```jsx
+import { BorderBeam } from '@/app/components/ui/border-beam';
+
+// Inside your component
+<div className="relative overflow-hidden">
+  <BorderBeam 
+    size={80}
+    duration={8}
+    colorFrom="#3B82F6" 
+    colorTo="#8B5CF6"
+  />
+  {/* Your content */}
+</div>
+```
+
+#### Properties
+
+- `size`: Size of the beam effect (default: 50)
+- `duration`: Animation duration in seconds (default: 6)
+- `colorFrom`: Start color of the gradient (default: "#ffaa40")
+- `colorTo`: End color of the gradient (default: "#9c40ff")
+- `reverse`: Reverse animation direction (default: false)

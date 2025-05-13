@@ -1,0 +1,51 @@
+services:
+  # Backend service
+  - type: web
+    name: docuquery-ai-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: oregon # Choose the closest region to your users
+    plan: standard # Adjust according to your needs
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false # Requires manual setup in the Render dashboard
+      - key: GOOGLE_PROJECT_ID
+        sync: false
+      - key: GOOGLE_LOCATION
+        value: us-central1
+      - key: BACKEND_API_KEY
+        generateValue: true # Auto-generate a secure API key
+      - key: CORS_ORIGINS
+        value: https://docuquery-ai.vercel.app,https://docuquery-ai-frontend.onrender.com
+      - key: DATABASE_URL
+        sync: false # Requires manual setup in the Render dashboard if you use a database
+      - key: PORT
+        value: 8000
+    disk:
+      name: data
+      mountPath: /app/vector_db_data
+      sizeGB: 10
+
+  # Frontend service (optional - if you want to also deploy frontend to Render)
+  # - type: web
+  #   name: docuquery-ai-frontend
+  #   env: static
+  #   buildCommand: cd frontend && npm install && npm run build
+  #   staticPublishPath: ./frontend/out
+  #   routes:
+  #     - type: rewrite
+  #       source: /*
+  #       destination: /index.html
+  #   envVars:
+  #     - key: NEXT_PUBLIC_BACKEND_URL
+  #       fromService:
+  #         name: docuquery-ai-backend
+  #         type: web
+  #         property: url
+  #     - key: NEXT_PUBLIC_BACKEND_API_KEY
+  #       fromService:
+  #         name: docuquery-ai-backend
+  #         type: web
+  #         envVarKey: BACKEND_API_KEY 

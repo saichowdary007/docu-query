@@ -23,7 +23,7 @@ Available tools:
     Output: A list of unique values.
 
 3.  **filter_structured_data**: Use this when the user wants to extract specific data from a CSV or Excel file based on conditions (e.g., "Find employees aged 35", "Extract salaries > $50k").
-    Input: {"file_name": "example.csv", "sheet_name": "Sheet1" (optional), "query_params": {"column": "Age", "operator": "==", "value": "35"}}
+    Input: {"file_name": "example.csv", "sheet_name": "Sheet1" (optional), "query_params": {"column": "Age", "operator": "==", "value": "35"}, "drop_duplicates": true/false (optional)}
     Output: A table of results or a message if no results.
 
 4.  **extract_entities**: Use this when the user asks for specific entities like names, dates, or organizations from text.
@@ -47,13 +47,33 @@ User Query: "{user_query}"
 Uploaded files context (summaries of structured files are included if relevant):
 {context}
 
+Selected file (if specified): {specified_file}
+
 Based on the query and context, determine the primary intent.
+If a specific file is specified, prioritize that file for your query.
 If the intent is `list_column_values` or `filter_structured_data`, identify the target file, sheet (if applicable), column, and any filter conditions.
+If a selected file is specified and is a structured file, assume the query is about that file.
 If the intent is general retrieval or entity extraction from text, use `retrieve_general_info` or `extract_entities`.
+
+For queries related to structured data, look for indications about duplicates in the query:
+- If the user is asking about specific values or unique entries, include "drop_duplicates": true
+- If the user mentions wanting to see all data including duplicates, include "drop_duplicates": false
+- By default, assume duplicates should be shown (drop_duplicates: false)
+
+For complex queries with multiple conditions (e.g., "show males with age over 30"), create a list of conditions:
+{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": [
+  {{"column": "Gender", "operator": "==", "value": "Male"}},
+  {{"column": "Age", "operator": ">", "value": "30"}}
+], "drop_duplicates": false}}}}
 
 Output your decision as a JSON object with "intent" and "parameters" keys.
 For example:
-{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": {{"column": "Salary", "operator": ">", "value": "50000"}}}}}}
+{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": {{"column": "Salary", "operator": ">", "value": "50000"}}, "drop_duplicates": false}}}}
+OR
+{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": [
+  {{"column": "Department", "operator": "==", "value": "Sales"}},
+  {{"column": "Salary", "operator": ">", "value": "50000"}}
+], "drop_duplicates": false}}}}
 OR
 {{"intent": "list_column_values", "parameters": {{"file_name": "projects.csv", "column_name": "Project Lead"}}}}
 OR
@@ -93,7 +113,7 @@ Helpful Answer:"""
     )
     return qa_chain
 
-async def process_query(user_query: str):
+async def process_query(user_query: str, file_context: str = None):
     llm = get_llm()
     retriever = get_retriever()
 
@@ -106,21 +126,42 @@ async def process_query(user_query: str):
     #    The vector store should have summaries of CSV/Excel files (column names, etc.)
     docs_for_intent = retriever.get_relevant_documents(user_query)
     context_for_intent = "\n".join([doc.page_content for doc in docs_for_intent])
+    
     # Add info about known structured files if not already in context
     # This part needs access to the list of uploaded structured files.
     # For now, we assume summaries are in the vector store.
+
+    # Check if file_context exists and is valid
+    if file_context:
+        # Try to load the file to confirm it exists
+        try:
+            # For structured files, this will load into cache if not present
+            structured_file = load_structured_file(file_context)
+            if structured_file is not None:
+                # File exists, add context about this being the selected file
+                file_is_structured = True
+            else:
+                # Not a structured file, but might be a text/PDF file
+                # We'll rely on the vector store to find it
+                file_is_structured = False
+        except Exception:
+            # If error loading, it might be a non-structured file or doesn't exist
+            file_is_structured = False
+    else:
+        file_is_structured = False
 
     # 2. Intent Recognition and Parameter Extraction using LLM
     #    (Simplified version; true function calling with Gemini would be more robust)
     intent_prompt = PromptTemplate(
         template=INTENT_PROMPT_TEMPLATE,
-        input_variables=["tool_descriptions", "user_query", "context"]
+        input_variables=["tool_descriptions", "user_query", "context", "specified_file"]
     )
     
     formatted_intent_prompt = intent_prompt.format(
         tool_descriptions=TOOL_DESCRIPTIONS,
         user_query=user_query,
-        context=context_for_intent
+        context=context_for_intent,
+        specified_file=file_context if file_context else "None"
     )
     
     # print(f"DEBUG: Intent Prompt: {formatted_intent_prompt}") # For debugging
@@ -150,6 +191,21 @@ async def process_query(user_query: str):
         intent = "retrieve_general_info"
         parameters = {"query": user_query}
 
+    # Check if the query is specifically about duplicates or unique records
+    lower_query = user_query.lower()
+    has_unique_keywords = any(kw in lower_query for kw in ['unique', 'distinct', 'without duplicates', 'no duplicates'])
+    has_duplicate_keywords = any(kw in lower_query for kw in ['including duplicates', 'with duplicates', 'all records', 'all data'])
+    
+    # Override parameters if query explicitly mentions duplicates/uniqueness
+    if intent == "filter_structured_data":
+        if has_unique_keywords and 'drop_duplicates' not in parameters:
+            parameters['drop_duplicates'] = True
+        elif has_duplicate_keywords and 'drop_duplicates' not in parameters:
+            parameters['drop_duplicates'] = False
+            
+    # If a specific file is provided in file_context, override the file_name parameter
+    if file_context and (intent == "filter_structured_data" or intent == "list_column_values"):
+        parameters["file_name"] = file_context
 
     # 3. Dispatch to appropriate handler
     if intent == "list_column_values":
@@ -183,21 +239,34 @@ async def process_query(user_query: str):
             file_name = parameters.get("file_name")
             query_params = parameters.get("query_params")
             sheet_name = parameters.get("sheet_name") # Might be None
-
+            drop_duplicates = parameters.get("drop_duplicates", False)
+            subset = parameters.get("subset", None)  # Optional list of columns for deduplication
+            
             if not file_name or not query_params:
                 raise ValueError("Missing file_name or query_params for filter_structured_data")
             
             if not load_structured_file(file_name):
                  return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
 
-            result_df = execute_filtered_query(file_name, query_params, sheet_name)
+            # Execute query with duplicate handling
+            result_df = execute_filtered_query(
+                file_name, 
+                query_params, 
+                sheet_name, 
+                drop_duplicates=drop_duplicates,
+                subset=subset
+            )
             
             # Determine download format based on original file extension
             _, original_ext = os.path.splitext(file_name.lower())
             download_filename = f"filtered_{os.path.splitext(file_name)[0]}{original_ext}"
             
+            # Adjust the answer based on duplicate handling
+            duplicate_info = " (showing unique records)" if drop_duplicates else ""
+            
             return {
-                "answer": f"Filtered data from '{file_name}'" + (f" (sheet: {sheet_name})" if sheet_name else "") + ". Results below:",
+                "answer": f"Filtered data from '{file_name}'" + (f" (sheet: {sheet_name})" if sheet_name else "") + 
+                         f"{duplicate_info}. Results below:",
                 "type": "table", # Frontend will render this as a table
                 "data": result_df.to_dict(orient="records"), # Send data for frontend table
                 "columns": [str(col) for col in result_df.columns.tolist()],
@@ -205,7 +274,9 @@ async def process_query(user_query: str):
                 "download_filename": download_filename, # For /download endpoint
                 "file_context": file_name, # Keep context of original file
                 "query_params_for_download": query_params,
-                "sheet_name_for_download": sheet_name
+                "sheet_name_for_download": sheet_name,
+                "drop_duplicates_for_download": drop_duplicates,
+                "subset_for_download": subset
             }
         except Exception as e:
             return {"answer": f"Error processing filter request: {str(e)}", "type": "text"}
@@ -225,12 +296,56 @@ async def process_query(user_query: str):
     final_query = parameters.get("query", user_query)
     
     try:
-        result = await qa_chain.ainvoke({"query": final_query}) # Langchain runs this async
-        answer = result.get("result", "No answer found.")
-        # source_documents = result.get("source_documents", [])
-        # sources_text = "\n".join([f"- {doc.metadata.get('source', 'Unknown')}" for doc in source_documents])
-        # full_answer = f"{answer}\n\nSources:\n{sources_text}"
-        return {"answer": answer, "type": "text"} #, "sources": sources_text}
+        # If a specific file is selected but not handled by structured data operations,
+        # we need to filter for documents only from that file
+        if file_context:
+            # For general RAG queries with a specific file, we need to filter the documents
+            # This requires a custom retriever that can filter by source
+            # For now, we'll use a simple approach of retrieving more documents than needed
+            # and then filtering them manually
+            
+            raw_docs = retriever.get_relevant_documents(final_query)
+            
+            # Filter documents to only include those from the specified file
+            filtered_docs = [doc for doc in raw_docs if file_context.lower() in doc.metadata.get('source', '').lower()]
+            
+            if not filtered_docs:
+                return {
+                    "answer": f"I couldn't find any relevant information in '{file_context}' for your query. "
+                              f"Please try a different question or select another file.",
+                    "type": "text"
+                }
+                
+            # Create context from filtered docs
+            context = "\n".join([doc.page_content for doc in filtered_docs])
+            
+            # Use the LLM directly with the filtered context
+            prompt = f"""Use the following context from the file '{file_context}' to answer the question. 
+If you don't know the answer based on this context, say so.
+
+Context: {context}
+
+Question: {final_query}
+
+Answer:"""
+            
+            answer_result = await llm.ainvoke(prompt)
+            if hasattr(answer_result, 'content'):
+                answer_result = answer_result.content
+                
+            return {
+                "answer": answer_result,
+                "type": "text",
+                "file_context": file_context
+            }
+        else:
+            # Standard RAG approach for no specific file
+            result = await qa_chain.ainvoke({"query": final_query})
+            answer = result.get("result", "No answer found.")
+            # source_documents = result.get("source_documents", [])
+            # sources_text = "\n".join([f"- {doc.metadata.get('source', 'Unknown')}" for doc in source_documents])
+            # full_answer = f"{answer}\n\nSources:\n{sources_text}"
+            return {"answer": answer, "type": "text"} #, "sources": sources_text}
     except Exception as e:
         print(f"Error during RAG chain execution: {e}")
         return {"answer": f"An error occurred while processing your request: {str(e)}", "type": "text"}

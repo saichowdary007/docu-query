@@ -9,18 +9,26 @@ import os
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
-# Configure CORS - Make sure we accept requests from browser origins
+# Configure CORS for different environments
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-# Add localhost:3000 explicitly
-if "http://localhost:3000" not in origins:
-    origins.append("http://localhost:3000")
+# Add development and production origins
+default_origins = [
+    "http://localhost:3000",
+    "https://docuquery-ai.vercel.app",     # Production Vercel URL
+    "https://docuquery-ai-git-main.vercel.app",  # Vercel preview branch URL
+]
+
+# Add default origins if not already included
+for origin in default_origins:
+    if origin not in origins:
+        origins.append(origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for debugging
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-KEY"],
 )
 
 @app.on_event("startup")

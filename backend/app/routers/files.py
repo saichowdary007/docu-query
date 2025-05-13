@@ -221,10 +221,15 @@ async def download_filtered_data(request: FileProcessRequest):
         if not request.original_filename or not request.query_params or not request.filename_to_download:
              raise HTTPException(status_code=400, detail="Missing parameters for download.")
 
+        # Handle both single condition and list of conditions
+        query_params = request.query_params
+        
         df = execute_filtered_query(
             filename=request.original_filename,
-            query_params=request.query_params,
-            sheet_name=request.sheet_name
+            query_params=query_params,
+            sheet_name=request.sheet_name,
+            drop_duplicates=request.drop_duplicates,
+            subset=request.subset
         )
 
         _, ext = os.path.splitext(request.filename_to_download.lower())

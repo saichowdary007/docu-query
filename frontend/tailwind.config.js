@@ -26,6 +26,7 @@ module.exports = {
       animation: {
         'gradient-x': 'gradient-x 10s ease infinite',
         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'shine': 'shine 30s ease infinite',
       },
       keyframes: {
         'gradient-x': {
@@ -35,6 +36,11 @@ module.exports = {
           '50%': {
             'background-position': '100% 50%',
           },
+        },
+        'shine': {
+          '0%': { 'background-position': '0% 50%' },
+          '50%': { 'background-position': '100% 50%' },
+          '100%': { 'background-position': '0% 50%' },
         },
       },
     },

@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { PaperAirplaneIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowDownTrayIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import { BorderBeam } from './ui/border-beam'
+import { apiUrls, getApiKey } from '../lib/api'
+import { useFiles } from '../lib/contexts'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -16,6 +19,8 @@ interface Message {
   file_context?: string
   query_params_for_download?: any
   sheet_name_for_download?: string
+  drop_duplicates_for_download?: boolean
+  subset_for_download?: string[]
   timestamp?: number
 }
 
@@ -33,6 +38,8 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [parent] = useAutoAnimate()
+  const { activeFile, files } = useFiles()
+  const prevActiveFileRef = useRef<string | null>(null)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -48,9 +55,49 @@ export default function ChatInterface() {
     }
   }, [isLoading, messages])
 
+  // Update welcome message when active file changes
+  useEffect(() => {
+    // Only update if the component is mounted and activeFile has actually changed
+    if (mounted && prevActiveFileRef.current !== activeFile) {
+      prevActiveFileRef.current = activeFile
+      
+      if (activeFile && files.length > 0) {
+        const activeFileObj = files.find(f => f.filename === activeFile)
+        const fileTypeText = activeFileObj?.is_structured ? 'structured data file' : 'document'
+        
+        setMessages([{
+          role: 'assistant',
+          content: `Hello! I'm ready to answer questions about "${activeFile}". This appears to be a ${fileTypeText}. What would you like to know?`,
+          timestamp: Date.now()
+        }])
+      } else if (files.length > 0 && !activeFile) {
+        setMessages([{
+          role: 'assistant',
+          content: 'Please select a file to chat with from the file manager.',
+          timestamp: Date.now()
+        }])
+      }
+    }
+  }, [activeFile, files, mounted])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
+    
+    // Check if a file is selected
+    if (!activeFile) {
+      setMessages(prev => [...prev, {
+        role: 'user',
+        content: input.trim(),
+        timestamp: Date.now()
+      }, {
+        role: 'assistant',
+        content: 'Please select a file to chat with before asking questions.',
+        timestamp: Date.now()
+      }])
+      setInput('')
+      return
+    }
 
     const userMessage = input.trim()
     setInput('')
@@ -63,17 +110,18 @@ export default function ChatInterface() {
     setIsLoading(true)
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-      console.log('Using API Key for chat:', apiKey ? 'API key is set' : 'API key is NOT set')
+      const apiKey = getApiKey()
       
-      // Use direct localhost URL
-      const response = await fetch('http://localhost:8000/api/v1/chat/query', {
+      const response = await fetch(apiUrls.chat, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-API-KEY': apiKey,
         },
-        body: JSON.stringify({ query: userMessage }),
+        body: JSON.stringify({ 
+          query: userMessage,
+          file_context: activeFile // Send the selected file to query
+        }),
       })
 
       console.log('Chat query response status:', response.status)
@@ -85,7 +133,6 @@ export default function ChatInterface() {
       }
 
       const data = await response.json()
-      console.log('Chat query success response:', data)
       
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -98,6 +145,8 @@ export default function ChatInterface() {
         file_context: data.file_context,
         query_params_for_download: data.query_params_for_download,
         sheet_name_for_download: data.sheet_name_for_download,
+        drop_duplicates_for_download: data.drop_duplicates_for_download,
+        subset_for_download: data.subset_for_download,
         timestamp: Date.now()
       }])
     } catch (error) {
@@ -116,10 +165,9 @@ export default function ChatInterface() {
     if (!message.download_available || !message.download_filename) return
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
+      const apiKey = getApiKey()
       
-      // Use direct localhost URL
-      const response = await fetch('http://localhost:8000/api/v1/files/download-filtered', {
+      const response = await fetch(apiUrls.fileDownload, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -130,6 +178,8 @@ export default function ChatInterface() {
           original_filename: message.file_context,
           query_params: message.query_params_for_download,
           sheet_name: message.sheet_name_for_download,
+          drop_duplicates: message.drop_duplicates_for_download,
+          subset: message.subset_for_download
         }),
       })
 
@@ -254,12 +304,33 @@ export default function ChatInterface() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="bg-gray-50 dark:bg-black rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col w-full h-full"
+      className="relative bg-gray-50 dark:bg-black rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col w-full h-full overflow-hidden"
     >
+      <BorderBeam 
+        size={100}
+        duration={8} 
+        colorFrom="#4F46E5" 
+        colorTo="#8B5CF6"
+      />
+      
       {/* Chat Header */}
       <div className="bg-white dark:bg-gray-950 px-4 py-3 border-b border-gray-200 dark:border-gray-800 rounded-t-lg">
-        <h2 className="text-lg font-medium text-gray-800 dark:text-gray-100">Chat with your documents</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Ask questions about your uploaded files</p>
+        <h2 className="text-lg font-medium text-gray-800 dark:text-gray-100 flex items-center">
+          <DocumentTextIcon className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
+          Chat with your documents
+        </h2>
+        
+        {activeFile ? (
+          <div className="mt-1 flex items-center">
+            <span className="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm font-medium border border-blue-200 dark:border-blue-800">
+              Currently querying: <span className="font-bold">{activeFile}</span>
+            </span>
+          </div>
+        ) : (
+          <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+            Please select a file from the file manager to start chatting
+          </p>
+        )}
       </div>
 
       {/* Messages Container */}
@@ -296,17 +367,17 @@ export default function ChatInterface() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about your documents..."
+            placeholder={activeFile ? "Ask a question about this document..." : "Please select a file first"}
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            disabled={isLoading}
+            disabled={isLoading || !activeFile}
           />
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             type="submit"
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input.trim() || !activeFile}
             className={`p-2 rounded-full ${
-              isLoading || !input.trim() 
+              isLoading || !input.trim() || !activeFile
                 ? 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed' 
                 : 'bg-blue-600 text-white hover:bg-blue-700 dark:hover:bg-blue-500'
             } focus:outline-none transition-colors`}

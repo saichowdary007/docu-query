@@ -19,7 +19,7 @@ async def handle_query(request: QueryRequest):
     sanitized_query = request.query # Add actual sanitization if needed
     
     try:
-        result = await process_query(sanitized_query)
+        result = await process_query(sanitized_query, file_context=request.file_context)
         # The `result` dict from process_query should align with QueryResponse fields
         return QueryResponse(**result)
     except Exception as e:
