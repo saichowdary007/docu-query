@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test File Upload</title>
+</head>
+<body>
+    <h1>Test File Upload</h1>
+    <form id="uploadForm">
+        <input type="file" id="fileInput" multiple>
+        <button type="submit">Upload</button>
+    </form>
+    <div id="status"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = 'Uploading...';
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('fileInput');
+            
+            for (const file of fileInput.files) {
+                formData.append('files', file);
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/files/upload', {
+                    method: 'POST',
+                    headers: {
+                        'X-API-KEY': 'secret_api_key_123'
+                    },
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.textContent = `Upload successful! Processed files: ${data.processed_files.join(', ')}`;
+                } else {
+                    const errorText = await response.text();
+                    statusDiv.textContent = `Upload failed: ${response.status} ${errorText}`;
+                }
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                console.error('Upload error:', error);
+            }
+        });
+    </script>
+</body>
+</html> 

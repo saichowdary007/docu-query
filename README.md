@@ -1,128 +1,151 @@
-# DocuQuery
+# DocuQuery AI
 
-DocuQuery is a RAG (Retrieval-Augmented Generation) chatbot that allows you to query your documents using natural language. It supports multiple file formats including CSV, XLSX, PDF, DOCX, PPTX, TXT, and MD.
+A powerful document query system that combines RAG (Retrieval-Augmented Generation) with structured data handling capabilities. Upload documents and interact with them through natural language queries.
 
 ## Features
 
-- **Multi-format document support**: CSV, XLSX, PDF, DOCX, PPTX, TXT, MD
-- **Drag-and-drop file upload**: Easy document ingestion
-- **Natural language querying**: Ask questions about your documents in plain English
-- **SQL querying for tabular data**: Run SQL queries on CSV and Excel files
-- **Export functionality**: Export query results as Excel files
-- **Citation tracking**: All responses include citations to the source documents
-- **Named Entity Recognition**: Automatically extracts persons and sections from your documents
-- **Code-first tabular queries**: Bypasses the LLM for simple count/list operations on tabular data
-- **File-scoped queries**: Keep conversations context-bound to specific documents
+- **Document Processing**:
+  - Supports PDF, DOCX, PPTX, TXT, MD files
+  - Handles structured data (CSV, XLS, XLSX)
+  - Automatic text chunking and embedding
+  - Vector store for semantic search
+
+- **Query Capabilities**:
+  - Natural language understanding
+  - RAG for unstructured documents
+  - Direct data operations on structured files
+  - Table filtering and downloads
+  - Entity extraction
+
+- **Modern UI**:
+  - Real-time chat interface
+  - Drag-and-drop file upload
+  - Interactive data visualization
+  - Responsive design
 
 ## Tech Stack
 
-- **Backend**: FastAPI, DuckDB, Chroma, Google Gemini 2.0 Flash, spaCy NER
-- **Frontend**: React, Vite, Tailwind CSS
-- **Deployment**: Docker Compose
+### Backend
+- FastAPI
+- LangChain
+- Google Vertex AI (Embeddings & LLM)
+- FAISS Vector Store
+- Pandas for structured data
+- Various document parsers (PyPDF2, python-docx, etc.)
 
-## Getting Started
+### Frontend
+- Next.js 14
+- React
+- TypeScript
+- TailwindCSS
+- React Dropzone
 
-### Prerequisites
+## Setup
 
-- Docker and Docker Compose
-- Google API key for Gemini (get one at https://makersuite.google.com/app/apikey)
-
-### Installation
-
-1. Clone the repository:
+1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/docuquery.git
-   cd docuquery
+   git clone https://github.com/yourusername/docuquery-ai.git
+   cd docuquery-ai
    ```
 
-2. Create a `.env` file in the root directory with your Google API key:
-   ```
-   GOOGLE_API_KEY=your_google_api_key_here
-   ```
-
-3. Build and start the application:
+2. **Set up environment variables**:
    ```bash
-   docker compose up --build
+   # Copy example env files
+   cp backend/.env.example backend/.env
    ```
+   Edit the `.env` file with your:
+   - Google Cloud credentials
+   - Backend API key
+   - Other configuration
 
-4. Access the application at http://localhost:5173
+3. **Using Docker (Recommended)**:
+   ```bash
+   docker-compose up --build
+   ```
+   This will start both frontend and backend services.
 
-## Usage
-
-1. Upload your documents using the drag-and-drop interface
-2. Wait for the documents to be processed and indexed
-3. Ask questions about your documents in the chat interface
-4. For tabular data, you can:
-   - Ask natural language questions like "How many sales were made in Q1?"
-   - Use direct commands like "List all customers in New York"
-   - Use SQL queries by starting your message with "SELECT"
-5. To export data, ask for an export or use a SQL query and click the "Download Excel File" button
-6. For documents with named entities, you can ask "Who are the people mentioned in this document?"
-
-## Development
-
-### Project Structure
-
-```
-docuquery/
-├── backend/
-│   ├── Dockerfile
-│   ├── main.py
-│   ├── rag_core.py
-│   ├── response_generator.py
-│   ├── test_document_indexing.py
-│   ├── test_imports.py
-│   └── requirements.txt
-├── frontend/
-│   ├── Dockerfile
-│   ├── package.json
-│   └── src/
-│       ├── App.jsx
-│       ├── api.js
-│       └── components/
-│           ├── ChatWindow.jsx
-│           └── FileDrop.jsx
-├── docs/
-│   └── system_prompt.md
-└── docker-compose.yml
-```
-
-### Local Development
-
-To develop locally:
-
-1. Start the backend:
+4. **Manual Setup**:
+   
+   Backend:
    ```bash
    cd backend
+   python -m venv venv
+   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
    pip install -r requirements.txt
-   python -m spacy download en_core_web_sm
-   uvicorn main:app --reload
+   uvicorn app.main:app --reload
    ```
 
-2. Start the frontend:
+   Frontend:
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
 
-### Testing
+5. **Access the application**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
 
-Run the test suite to verify functionality:
+## Usage
 
-```bash
-cd backend
-python -m unittest discover
-```
+1. **Upload Documents**:
+   - Use the file upload interface
+   - Drag & drop supported
+   - Multiple files accepted
 
-## Recent Enhancements
+2. **Query Your Documents**:
+   - Type natural language questions
+   - Ask about document content
+   - Request specific data from structured files
+   - Download filtered results
 
-- **Row-level spreadsheet ingestion**: Each row is now individually indexed with its own metadata
-- **Named Entity Recognition**: Using spaCy to extract person names and document sections
-- **Code-first tabular queries**: Direct SQL generation for simple count/list operations
-- **File-scoped namespace**: Queries can now be limited to specific uploaded files
-- **Enhanced exports**: Improved Excel export functionality via the /export endpoint
+3. **Examples**:
+   ```
+   "What are the main risks mentioned in the report?"
+   "Show me all departments from employees.xlsx"
+   "Find sales records over $50,000"
+   "Extract all dates and locations from the documents"
+   ```
+
+## Architecture
+
+The system uses a hybrid approach:
+- RAG for unstructured documents (PDF, DOCX, etc.)
+- Direct data operations for structured files (CSV, Excel)
+- LLM for query understanding and response generation
+- Vector store for semantic search
+- Caching for structured data operations
+
+## Development
+
+- **Backend Structure**:
+  - `app/`: Main application code
+  - `core/`: Configuration and security
+  - `models/`: Pydantic models
+  - `services/`: Business logic
+  - `routers/`: API endpoints
+
+- **Frontend Structure**:
+  - `app/`: Next.js app directory
+  - `components/`: React components
+  - `styles/`: CSS and styling
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-MIT 
+MIT License - see LICENSE file for details.
+
+## Acknowledgments
+
+- LangChain for RAG implementation
+- Google Vertex AI for ML capabilities
+- FastAPI for the robust backend
+- Next.js team for the frontend framework

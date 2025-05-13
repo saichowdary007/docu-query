@@ -1,18 +1,9 @@
-# Environment variables
-.env
-*.env
-venv/
-.venv/
-venv311/
-myenv/
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -24,30 +15,55 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+.env
+venv/
+.venv/
+env/
+ENV/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
 
-# Node.js
+# Node.js and Next.js
 node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
-
-# Build files
-frontend/dist/
-frontend/build/
-
-# Data files
-backend/uploads/
-backend/chroma_db/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+out/
+build/
+.DS_Store
+*.pem
+.env*.local
+.vercel
+next-env.d.ts
+.turbo
+.eslintcache
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# OS
 .DS_Store
-Thumbs.db 
+
+# Project specific
+backend/temp_uploads/
+backend/vector_db_data/
+*.log
+.cache/
+**/public/workbox-*.js
+**/public/sw.js
+**/public/service-worker.js
+
+# Local Netlify folder
+.netlify

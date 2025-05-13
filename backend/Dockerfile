@@ -1,54 +1,29 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies needed for Python package builds
+RUN apt-get update && apt-get install -y \
     build-essential \
-    curl \
-    git \
-    # Additional dependencies for Excel processing
-    libblas-dev \
-    liblapack-dev \
-    libatlas-base-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Set environment variables for Vertex AI if using ADC with a service account key
+# ENV GOOGLE_APPLICATION_CREDENTIALS /app/path/to/your-service-account-key.json 
+# Copy the key file if you use this method:
+# COPY path/to/your-service-account-key.json /app/path/to/your-service-account-key.json
+
+# Install system dependencies that might be needed by some Python packages (e.g., for certain builds)
+# Example: apt-get install -y build-essential libpq-dev
+# For Faiss, you might not need extra deps with faiss-cpu. If using Pillow for images later, add libjpeg-dev etc.
+
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install dependencies with optimized caching
-RUN pip install --no-cache-dir -U pip && \
-    # Install spaCy first with language model
-    pip install --no-cache-dir spacy==3.7.2 && \
-    python -m spacy download en_core_web_sm && \
-    # Install sentence transformers explicitly
-    pip install --no-cache-dir sentence-transformers==2.2.2 && \
-    # Install Excel-related packages explicitly
-    pip install --no-cache-dir xlrd==2.0.1 openpyxl==3.1.2 pyxlsb==1.0.10 && \
-    # Install remaining dependencies
-    pip install --no-cache-dir -r requirements.txt
+COPY ./app /app/app
 
-# Copy application code
-COPY . .
-
-# Create directories and ensure they're empty
-RUN mkdir -p uploads
-RUN mkdir -p chroma_db
-RUN rm -rf chroma_db/* || true
-
-# Create .env file if it doesn't exist
-RUN touch .env
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV CHROMA_DB_PATH=/app/chroma_db
-
-# Expose port
+# Expose the port the app runs on
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/ || exit 1
-
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Command to run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

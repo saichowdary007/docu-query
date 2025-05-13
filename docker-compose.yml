@@ -2,41 +2,36 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
-      - ./docs:/app/docs
-      - backend_data:/app/uploads
-      - backend_db:/app/chroma_db
+      - ./backend/app:/app/app
+      - ./backend/temp_uploads:/app/temp_uploads
+      - ./backend/vector_db_data:/app/vector_db_data
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - CHROMA_DB_PATH=/app/chroma_db
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-dummy_api_key}
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID:-dummy_project_id}
+      - GOOGLE_LOCATION=${GOOGLE_LOCATION:-us-central1}
+      - BACKEND_API_KEY=${BACKEND_API_KEY:-secret_api_key_123}
+      - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+      # If using service account key:
+      # - GOOGLE_APPLICATION_CREDENTIALS=/app/path/to/your-service-account-key.json
+    # If using service account key file:
+    # secrets:
+    #   - google_credentials
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
     ports:
-      - "5174:80"
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_API_KEY=${BACKEND_API_KEY:-secret_api_key_123}
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     depends_on:
       - backend
-    environment:
-      - VITE_API_URL=/api
-    restart: unless-stopped
 
-volumes:
-  backend_data:
-    name: docuquery_uploads
-  backend_db:
-    name: docuquery_chroma_db 
+# If using service account key file:
+# secrets:
+#   google_credentials:
+#     file: ./path/to/your-service-account-key.json

@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 245, 245, 245;
+  --background-end-rgb: 255, 255, 255;
+  --primary-color: 59, 130, 246;
+  --primary-color-light: 96, 165, 250;
+  --secondary-color: 107, 114, 128;
+  --accent-color: 16, 185, 129;
+  --border-color: 229, 231, 235;
+  --card-bg: 255, 255, 255;
+  --hover-bg: 243, 244, 246;
+}
+
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 17, 24, 39;
+  --background-end-rgb: 10, 15, 25;
+  --primary-color: 96, 165, 250;
+  --primary-color-light: 147, 197, 253;
+  --secondary-color: 156, 163, 175;
+  --accent-color: 5, 150, 105;
+  --border-color: 55, 65, 81;
+  --card-bg: 31, 41, 55;
+  --hover-bg: 55, 65, 81;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+  transition: background-color 0.5s ease, color 0.5s ease;
+}
+
+/* Apply transitions to common elements */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Custom scrollbar for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.6);
+  border-radius: 4px;
+}
+
+/* Auto-expanding chat input */
+.chat-input-container {
+  position: relative;
+}
+
+.chat-input {
+  max-height: 120px;
+  overflow-y: auto;
+  resize: none;
+  transition: height 0.2s ease;
+} 
