@@ -19,5 +19,6 @@ pypdf # PyPDF2 is an alias, pypdf is the successor
 markdown
 requests
 python-dotenv
+numpy
 # For Tika (optional, more complex setup)
 # tika

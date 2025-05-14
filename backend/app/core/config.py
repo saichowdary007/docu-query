@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     GOOGLE_API_KEY: Union[str, None] = os.getenv("GOOGLE_API_KEY") # Or use service account json path
-    GOOGLE_PROJECT_ID: Union[str, None] = os.getenv("GOOGLE_PROJECT_ID")
+    GOOGLE_PROJECT_ID: Union[str, None] = os.getenv("GOOGLE_PROJECT_ID", "") # Made optional with empty string default
     GOOGLE_LOCATION: str = os.getenv("GOOGLE_LOCATION", "us-central1") # e.g., us-central1
 
     # For API Key Authentication

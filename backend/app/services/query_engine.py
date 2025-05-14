@@ -2,9 +2,11 @@ from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from app.services.nlp_service import get_llm
 from app.services.vector_store import get_retriever
-from app.services.data_handler import get_interactive_list, execute_filtered_query, load_structured_file
+from app.services.data_handler import get_interactive_list, execute_filtered_query, load_structured_file, count_matching_rows
 import json
 import os
+import pandas as pd
+from copy import deepcopy
 
 # This is a crucial part: Intent recognition and dispatching
 # For a production system, this would be more sophisticated, possibly using
@@ -217,8 +219,8 @@ async def process_query(user_query: str, file_context: str = None):
                 raise ValueError("Missing file_name or column_name for list_column_values")
             
             # Verify file exists (load_structured_file will try to load it)
-            # This is a simplified check; ideally, maintain a list of uploaded structured files.
-            if not load_structured_file(file_name): # This loads into cache if not present
+            loaded_file = load_structured_file(file_name)  # Loads into cache if not present
+            if loaded_file is None:
                  return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
 
             result_list = get_interactive_list(file_name, column_name, sheet_name)
@@ -242,20 +244,37 @@ async def process_query(user_query: str, file_context: str = None):
             drop_duplicates = parameters.get("drop_duplicates", False)
             subset = parameters.get("subset", None)  # Optional list of columns for deduplication
             
+            print(f"DEBUG: Processing filter with params: file={file_name}, query_params={query_params}, sheet={sheet_name}")
+            
             if not file_name or not query_params:
                 raise ValueError("Missing file_name or query_params for filter_structured_data")
             
-            if not load_structured_file(file_name):
+            loaded_file = load_structured_file(file_name)
+            if loaded_file is None:
                  return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
 
             # Execute query with duplicate handling
-            result_df = execute_filtered_query(
-                file_name, 
-                query_params, 
-                sheet_name, 
-                drop_duplicates=drop_duplicates,
-                subset=subset
-            )
+            print(f"DEBUG: Executing filter query on file {file_name}")
+            try:
+                result_df = execute_filtered_query(
+                    file_name, 
+                    query_params, 
+                    sheet_name, 
+                    drop_duplicates=drop_duplicates,
+                    subset=subset
+                )
+                print(f"DEBUG: Query successful, got DataFrame with {len(result_df)} rows")
+            except Exception as e:
+                print(f"DEBUG: Execute_filtered_query failed with error: {str(e)}")
+                raise
+            
+            # Verify result_df is not empty
+            if result_df.empty:
+                return {
+                    "answer": f"No matching data found in '{file_name}' for your query.",
+                    "type": "text",
+                    "file_context": file_name  # Preserve file context even for empty results
+                }
             
             # Determine download format based on original file extension
             _, original_ext = os.path.splitext(file_name.lower())
@@ -279,7 +298,12 @@ async def process_query(user_query: str, file_context: str = None):
                 "subset_for_download": subset
             }
         except Exception as e:
-            return {"answer": f"Error processing filter request: {str(e)}", "type": "text"}
+            print(f"Error in filter_structured_data: {str(e)}")  # Add debug print
+            return {
+                "answer": f"Error processing filter request: {str(e)}", 
+                "type": "text",
+                "file_context": parameters.get("file_name")  # Preserve file context even when error occurs
+            }
 
     # Default to general RAG or if entity extraction is its own path
     # elif intent == "extract_entities":
@@ -294,6 +318,136 @@ async def process_query(user_query: str, file_context: str = None):
     
     # If parameters contain a specific query from intent detection, use it. Otherwise, use original.
     final_query = parameters.get("query", user_query)
+    
+    # Check for "number of X" or "count of X" type queries
+    lower_query = user_query.lower()
+    count_match = False
+    
+    # First check for total count queries (highest priority)
+    simple_count_keywords = ["number of people", "how many people", "count of people", 
+                           "number of rows", "how many rows", "count of rows",
+                           "number of records", "how many records", "count of records",
+                           "number of entries", "how many entries", "count of entries",
+                           "total people", "total rows", "total records", "total entries"]
+                           
+    if any(keyword in lower_query for keyword in simple_count_keywords) or lower_query.strip() in simple_count_keywords:
+        if file_context:
+            try:
+                # Use the already imported load_structured_file function
+                data = load_structured_file(file_context)
+                
+                row_count = 0
+                if isinstance(data, pd.DataFrame):  # CSV
+                    row_count = len(data)
+                elif isinstance(data, dict):
+                    # Attempt to use a sheet name if the LLM detected one
+                    sheet_name_param = parameters.get("sheet_name") if isinstance(parameters, dict) else None
+                    if sheet_name_param and sheet_name_param in data:
+                        row_count = len(data[sheet_name_param])
+                    elif len(data) == 1:
+                        # Only one sheet present – count its rows
+                        row_count = len(next(iter(data.values())))
+                    else:
+                        # Multiple sheets and none specified – sum all rows
+                        row_count = sum(len(df) for df in data.values())
+                
+                print(f"DEBUG: Total count query detected, returning {row_count}")
+                return {
+                    "answer": str(row_count),
+                    "type": "text",
+                    "file_context": file_context
+                }
+            except Exception as e:
+                print(f"DEBUG: Error counting rows: {str(e)}")
+            
+    # Now check for specific count queries (gender, etc)
+    if "number of " in lower_query or "count of " in lower_query or "how many " in lower_query:
+        count_match = True
+        
+        # For complex queries, we should use the intent recognition to parse multiple conditions
+        # rather than trying to directly extract the count target
+        
+        # Check if the intent system detected multiple conditions (filter_structured_data intent)
+        if intent == "filter_structured_data" and file_context:
+            print(f"DEBUG: Detected complex count query with multiple conditions: {query_params}")
+            
+            # Make sure query_params is marked for count_only operation
+            # If it's a dict with a single condition
+            if isinstance(query_params, dict):
+                query_params["count_only"] = True
+            # If it's a list of conditions
+            elif isinstance(query_params, list) and len(query_params) > 0:
+                # Add a new query parameter to the first condition in the list to indicate count only
+                # We need to use deepcopy to avoid modifying the original parameters
+                modified_params = deepcopy(query_params)
+                if isinstance(modified_params[0], dict):
+                    modified_params[0]["count_only"] = True
+                    
+                # Execute filtered query with all conditions
+                try:
+                    result_df = execute_filtered_query(
+                        file_context,
+                        modified_params,
+                        parameters.get("sheet_name"),
+                        drop_duplicates=True  # For counting, we typically want unique records
+                    )
+                    
+                    # Get the count - simply return the number of rows
+                    count_value = len(result_df)
+                    return {
+                        "answer": str(count_value),
+                        "type": "text",
+                        "file_context": file_context
+                    }
+                except Exception as e:
+                    print(f"DEBUG: Error executing complex count query: {str(e)}")
+            
+        # Simple extraction for straightforward queries (fallback to previous implementation)
+        # Extract what we're counting after the keywords
+        count_target = None
+        if "number of " in lower_query:
+            count_target = lower_query.split("number of ")[1].strip()
+        elif "count of " in lower_query:
+            count_target = lower_query.split("count of ")[1].strip()
+        elif "how many " in lower_query:
+            count_target = lower_query.split("how many ")[1].strip()
+        
+        if count_target and file_context:
+            # First check if we need to handle a multi-part count target
+            # For example "male employees in France" or "female employees with age > 30"
+            parts = count_target.split()
+            
+            # If it's a simple count like "males" or "females"
+            if len(parts) == 1 or (parts[0].lower() in ["male", "female", "males", "females"]):
+                # Handle gender specially
+                gender_value = None
+                if parts[0].lower() in ["male", "males", "men", "man"]:
+                    gender_value = "male"
+                    column_name = "Gender"
+                elif parts[0].lower() in ["female", "females", "women", "woman"]:
+                    gender_value = "female"
+                    column_name = "Gender"
+                    
+                # If we have a gender value, try to count it
+                if gender_value:
+                    try:
+                        count_value = count_matching_rows(file_context, column_name, gender_value)
+                        return {
+                            "answer": str(count_value),
+                            "type": "text",
+                            "file_context": file_context
+                        }
+                    except Exception as e:
+                        print(f"DEBUG: Error in simple gender count: {str(e)}")
+            
+            # For more complex queries, tell the user we need to improve the parsing
+            return {
+                "answer": "I understand you're asking for a count with multiple conditions. Please try separate simple queries for now, or phrase your question like 'show me all male employees from France' to see the full filtered data.",
+                "type": "text",
+                "file_context": file_context
+            }
+        
+    # If we reach here, no special count handling was done, continue with normal process
     
     try:
         # If a specific file is selected but not handled by structured data operations,

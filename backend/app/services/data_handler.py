@@ -3,6 +3,7 @@ import os
 from typing import Dict, List, Any, Union, Optional
 from io import BytesIO
 from app.core.config import settings
+import numpy as np
 
 # Simple cache for loaded dataframes to avoid re-reading constantly
 # Key: filename, Value: pd.DataFrame or Dict[str, pd.DataFrame] for Excel
@@ -58,6 +59,63 @@ def get_interactive_list(filename: str, column_name: str, sheet_name: str = None
     return df_to_query[column_name].unique().tolist()
 
 
+def count_matching_rows(filename: str, column: str, value: Any, sheet_name: str = None) -> int:
+    """
+    Count rows in a DataFrame that match a specific value in a column.
+    This is useful for queries like "how many males" or "number of department X".
+    
+    Args:
+        filename: The name of the file to query
+        column: The column to filter on
+        value: The value to match
+        sheet_name: Sheet name for Excel files (optional)
+        
+    Returns:
+        int: Count of matching rows
+    """
+    data = load_structured_file(filename)
+    if data is None:
+        raise ValueError(f"File {filename} not found or could not be loaded")
+        
+    # Get the dataframe to query
+    if isinstance(data, pd.DataFrame): # CSV
+        df = data.copy()
+        is_csv = True
+    elif isinstance(data, dict) and sheet_name: # Excel with sheet
+        df = data.get(sheet_name).copy() if sheet_name in data else None
+        is_csv = False
+    elif isinstance(data, dict) and not sheet_name and len(data) == 1: # Excel with single sheet
+        df = next(iter(data.values())).copy()
+        is_csv = False
+    else:
+        raise ValueError("Could not determine the right dataframe to query")
+    
+    if df is None:
+        raise ValueError(f"Sheet '{sheet_name}' not found in '{filename}'")
+    
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in the data")
+    
+    # For string comparisons, normalize and use case-insensitive comparison
+    if pd.api.types.is_string_dtype(df[column]) or is_csv:
+        # Convert column to string and normalize
+        df_col = df[column].astype(str).str.strip().str.lower()
+        value_str = str(value).strip().lower()
+        # Get mask and count True values
+        mask = df_col.eq(value_str)
+        return int(mask.sum())
+    else:
+        # For numeric or other comparisons
+        try:
+            if pd.api.types.is_numeric_dtype(df[column]):
+                value = float(value) if '.' in str(value) else int(value)
+            # Get mask and count True values
+            mask = df[column] == value
+            return int(mask.sum())
+        except (ValueError, TypeError):
+            raise ValueError(f"Cannot compare values of column '{column}' with '{value}'")
+
+
 def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = None, drop_duplicates: bool = False, 
                            subset: Optional[List[str]] = None) -> pd.DataFrame:
     """
@@ -93,35 +151,93 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
     if df_to_query is None:
         raise ValueError(f"Sheet '{sheet_name}' not found in '{filename}' or data structure issue.")
     
+    # Handle specific cases - pre-process common columns for CSV files
+    if is_csv:
+        # Pre-process specific columns that might cause issues
+        if 'Gender' in df_to_query.columns:
+            # Normalize gender values to avoid case/whitespace issues
+            df_to_query['Gender'] = df_to_query['Gender'].astype(str).str.strip().str.lower()
+    
+    # Special case for "count" or "number of" queries with equality operator
+    count_only = False
+    if isinstance(query_params, dict) and query_params.get("count_only", False):
+        count_only = True
+        # If it's a simple count query with a single equality condition
+        if query_params.get("operator") == "==":
+            col = query_params.get("column")
+            val = query_params.get("value")
+            try:
+                count = count_matching_rows(filename, col, val, sheet_name)
+                # Create a simple DataFrame with the count to return
+                return pd.DataFrame({"Count": [count]})
+            except Exception as e:
+                print(f"Error in count_matching_rows: {str(e)}")
+                # Fall back to normal filtering below
+    
     # Process single or multiple conditions
-    if isinstance(query_params, list):
-        # Apply multiple conditions sequentially
-        for condition in query_params:
-            col = condition.get("column")
-            op = condition.get("operator")
-            val = condition.get("value")
+    try:
+        if isinstance(query_params, list):
+            # Apply multiple conditions sequentially
+            for condition in query_params:
+                col = condition.get("column")
+                op = condition.get("operator")
+                val = condition.get("value")
+                
+                if not all([col, op, val is not None]):  # Changed to handle val=0 or val=False
+                    raise ValueError("Invalid query parameters. Need column, operator, and value.")
+                if col not in df_to_query.columns:
+                    raise ValueError(f"Column '{col}' not found in data.")
+                
+                # Special handling for gender column in CSV files to prevent ambiguity
+                if is_csv and col.lower() == 'gender' and op == "==":
+                    val = str(val).strip().lower()  # Normalize value
+                    # Create mask directly
+                    mask = (df_to_query[col] == val).to_numpy()
+                    df_to_query = df_to_query.loc[mask]
+                else:
+                    # Apply filter for this condition
+                    try:
+                        df_to_query = filter_dataframe(df_to_query, col, op, val, is_csv)
+                    except Exception as e:
+                        print(f"Error filtering on {col} {op} {val}: {str(e)}")
+                        raise ValueError(f"Error filtering on {col} {op} {val}: {str(e)}")
+        else:
+            # Apply single condition
+            col = query_params.get("column")
+            op = query_params.get("operator")
+            val = query_params.get("value")
             
-            if not all([col, op, val]):
+            if not all([col, op, val is not None]):  # Changed to handle val=0 or val=False
                 raise ValueError("Invalid query parameters. Need column, operator, and value.")
             if col not in df_to_query.columns:
                 raise ValueError(f"Column '{col}' not found in data.")
             
-            # Apply filter for this condition
-            df_to_query = filter_dataframe(df_to_query, col, op, val, is_csv)
-    else:
-        # Apply single condition
-        col = query_params.get("column")
-        op = query_params.get("operator")
-        val = query_params.get("value")
+            # Special handling for gender column in CSV files to prevent ambiguity
+            if is_csv and col.lower() == 'gender' and op == "==":
+                val = str(val).strip().lower()  # Normalize value
+                # Create mask directly 
+                mask = (df_to_query[col] == val).to_numpy()
+                df_to_query = df_to_query.loc[mask]
+            else:
+                # Apply filter
+                try:
+                    df_to_query = filter_dataframe(df_to_query, col, op, val, is_csv)
+                except Exception as e:
+                    print(f"Error filtering on {col} {op} {val}: {str(e)}")
+                    raise ValueError(f"Error filtering on {col} {op} {val}: {str(e)}")
+                    
+        # Special case for count-only queries with multiple conditions
+        # Return just the count after all filters have been applied
+        if count_only and isinstance(query_params, list):
+            # Handle duplicates if requested before counting
+            if drop_duplicates:
+                df_to_query = df_to_query.drop_duplicates(subset=subset)
+            return pd.DataFrame({"Count": [len(df_to_query)]})
+                
+    except Exception as e:
+        print(f"Error during query execution: {str(e)}")
+        raise
         
-        if not all([col, op, val]):
-            raise ValueError("Invalid query parameters. Need column, operator, and value.")
-        if col not in df_to_query.columns:
-            raise ValueError(f"Column '{col}' not found in data.")
-        
-        # Apply filter
-        df_to_query = filter_dataframe(df_to_query, col, op, val, is_csv)
-    
     # Handle duplicates if requested
     if drop_duplicates:
         df_to_query = df_to_query.drop_duplicates(subset=subset)
@@ -138,17 +254,13 @@ def filter_dataframe(df: pd.DataFrame, col: str, op: str, val: Any, is_csv: bool
             df_col_str = df[col].astype(str).str.strip().str.lower()
             val_str = str(val).strip().lower()
             
-            # Apply the appropriate comparison
             if op == "==":
-                # Create a boolean mask
-                mask = df_col_str == val_str
-                # Use .loc to avoid ambiguous truth value errors
+                mask = df_col_str.eq(val_str)
                 return df.loc[mask]
             elif op == "!=":
-                mask = df_col_str != val_str
+                mask = df_col_str.ne(val_str)
                 return df.loc[mask]
             elif op == "contains":
-                # Handle NaN values
                 mask = df_col_str.str.contains(val_str, na=False)
                 return df.loc[mask]
         
@@ -162,24 +274,19 @@ def filter_dataframe(df: pd.DataFrame, col: str, op: str, val: Any, is_csv: bool
             except ValueError:
                 raise ValueError(f"Cannot convert '{val}' to a number for comparison.")
             
-            # Apply the appropriate comparison
+            # Apply comparisons and create masks
             if op == ">":
                 mask = df_col_num > val_num
-                # Fill NaN values in mask with False
-                mask = mask.fillna(False)
-                return df.loc[mask]
+                return df.loc[mask.fillna(False)]
             elif op == "<":
                 mask = df_col_num < val_num
-                mask = mask.fillna(False)
-                return df.loc[mask]
+                return df.loc[mask.fillna(False)]
             elif op == ">=":
                 mask = df_col_num >= val_num
-                mask = mask.fillna(False)
-                return df.loc[mask]
+                return df.loc[mask.fillna(False)]
             elif op == "<=":
                 mask = df_col_num <= val_num
-                mask = mask.fillna(False)
-                return df.loc[mask]
+                return df.loc[mask.fillna(False)]
             else:
                 raise ValueError(f"Unsupported operator '{op}' for numeric comparison.")
     
@@ -194,23 +301,30 @@ def filter_dataframe(df: pd.DataFrame, col: str, op: str, val: Any, is_csv: bool
         except ValueError:
             raise ValueError(f"Could not convert '{val}' to match column '{col}' type.")
         
-        # Apply the filter
+        # Apply filters using masks
         if op == "==":
-            return df.loc[df[col] == val]
+            mask = (df[col] == val).to_numpy()
+            return df.loc[mask]
         elif op == "!=":
-            return df.loc[df[col] != val]
+            mask = (df[col] != val).to_numpy()
+            return df.loc[mask]
         elif op == ">":
-            return df.loc[df[col] > val]
+            mask = (df[col] > val).to_numpy()
+            return df.loc[mask]
         elif op == "<":
-            return df.loc[df[col] < val]
+            mask = (df[col] < val).to_numpy()
+            return df.loc[mask]
         elif op == ">=":
-            return df.loc[df[col] >= val]
+            mask = (df[col] >= val).to_numpy()
+            return df.loc[mask]
         elif op == "<=":
-            return df.loc[df[col] <= val]
+            mask = (df[col] <= val).to_numpy()
+            return df.loc[mask]
         elif op == "contains" and isinstance(val, str):
             if not pd.api.types.is_string_dtype(df[col]):
-                raise ValueError(f"Column '{col}' must be string type for 'contains' operator.")
-            return df.loc[df[col].str.contains(val, case=False, na=False)]
+                df[col] = df[col].astype(str)  # Convert column to string type
+            mask = df[col].str.contains(val, case=False, na=False).to_numpy()
+            return df.loc[mask]
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
