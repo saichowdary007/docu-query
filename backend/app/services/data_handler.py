@@ -127,6 +127,9 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
         {"column": "Gender", "operator": "==", "value": "Male"},
         {"column": "Age", "operator": ">", "value": 36}
     ]
+    
+    Special cases:
+    - If query_params is an empty list [], returns all records without filtering
     """
     data = load_structured_file(filename)
     if data is None:
@@ -173,6 +176,16 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
             except Exception as e:
                 print(f"Error in count_matching_rows: {str(e)}")
                 # Fall back to normal filtering below
+    
+    # Handle empty query_params list - return all records without filtering
+    if isinstance(query_params, list) and len(query_params) == 0:
+        print(f"No query parameters provided. Returning all records from {filename}")
+        
+        # Handle duplicates if requested
+        if drop_duplicates:
+            df_to_query = df_to_query.drop_duplicates(subset=subset)
+            
+        return df_to_query
     
     # Process single or multiple conditions
     try:

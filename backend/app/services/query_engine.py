@@ -25,7 +25,7 @@ Available tools:
     Output: A list of unique values.
 
 3.  **filter_structured_data**: Use this when the user wants to extract specific data from a CSV or Excel file based on conditions (e.g., "Find employees aged 35", "Extract salaries > $50k").
-    Input: {"file_name": "example.csv", "sheet_name": "Sheet1" (optional), "query_params": {"column": "Age", "operator": "==", "value": "35"}, "drop_duplicates": true/false (optional)}
+    Input: {"file_name": "example.csv", "sheet_name": "Sheet1" (optional), "query_params": {"column": "Age", "operator": "==", "value": "35"}, "drop_duplicates": true/false (optional), "return_columns": ["Name","Salary"] (optional)}
     Output: A table of results or a message if no results.
 
 4.  **extract_entities**: Use this when the user asks for specific entities like names, dates, or organizations from text.
@@ -53,7 +53,7 @@ Selected file (if specified): {specified_file}
 
 Based on the query and context, determine the primary intent.
 If a specific file is specified, prioritize that file for your query.
-If the intent is `list_column_values` or `filter_structured_data`, identify the target file, sheet (if applicable), column, and any filter conditions.
+If the intent is `list_column_values` or `filter_structured_data`, identify the target file, sheet (if applicable), column, any filter conditions, and (optionally) a list of columns to return (`return_columns`).
 If a selected file is specified and is a structured file, assume the query is about that file.
 If the intent is general retrieval or entity extraction from text, use `retrieve_general_info` or `extract_entities`.
 
@@ -62,11 +62,11 @@ For queries related to structured data, look for indications about duplicates in
 - If the user mentions wanting to see all data including duplicates, include "drop_duplicates": false
 - By default, assume duplicates should be shown (drop_duplicates: false)
 
-For complex queries with multiple conditions (e.g., "show males with age over 30"), create a list of conditions:
+For complex queries with multiple conditions (e.g., "show males with age over 30"), create a list of conditions and include `return_columns` if the user requests specific fields:
 {{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": [
   {{"column": "Gender", "operator": "==", "value": "Male"}},
   {{"column": "Age", "operator": ">", "value": "30"}}
-], "drop_duplicates": false}}}}
+], "drop_duplicates": false, "return_columns": ["Name","Age"]}}}}
 
 Output your decision as a JSON object with "intent" and "parameters" keys.
 For example:
@@ -244,14 +244,32 @@ async def process_query(user_query: str, file_context: str = None):
             drop_duplicates = parameters.get("drop_duplicates", False)
             subset = parameters.get("subset", None)  # Optional list of columns for deduplication
             
-            print(f"DEBUG: Processing filter with params: file={file_name}, query_params={query_params}, sheet={sheet_name}")
+            # ── 1.  Resolve file_name automatically ────────────────────
+            if not file_name:
+                # (a) Use the selected file_context if present
+                if file_context:
+                    file_name = file_context
+                else:
+                    # (b) Fallback: if exactly one structured file is cached, use it
+                    from app.services.data_handler import STRUCTURED_DATA_CACHE
+                    if len(STRUCTURED_DATA_CACHE) == 1:
+                        file_name = next(iter(STRUCTURED_DATA_CACHE.keys()))
+            if not file_name:
+                raise ValueError("No structured file found. Please upload a CSV/XLS file first.")
             
-            if not file_name or not query_params:
-                raise ValueError("Missing file_name or query_params for filter_structured_data")
+            # ── 2.  Treat missing query_params as "no filter" ───────────
+            if not query_params:
+                query_params = []  # execute_filtered_query will return full DataFrame
+                
+            # file_name is now guaranteed; query_params can be empty list
             
+            # Check if we just want to return specific columns without filtering
+            return_columns = parameters.get("return_columns") or parameters.get("columns_to_return")
+            
+            # Load file to verify it exists
             loaded_file = load_structured_file(file_name)
             if loaded_file is None:
-                 return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
+                return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
 
             # Execute query with duplicate handling
             print(f"DEBUG: Executing filter query on file {file_name}")
@@ -263,40 +281,60 @@ async def process_query(user_query: str, file_context: str = None):
                     drop_duplicates=drop_duplicates,
                     subset=subset
                 )
+                
                 print(f"DEBUG: Query successful, got DataFrame with {len(result_df)} rows")
+                
+                # ─── OPTIONAL: limit to specific columns ─────────────────
+                if return_columns:
+                    if isinstance(return_columns, str):
+                        return_columns = [return_columns]
+                    missing = [c for c in return_columns if c not in result_df.columns]
+                    if missing:
+                        print(f"WARNING: Requested columns not found in data: {missing}")
+                        # Filter out missing columns 
+                        return_columns = [c for c in return_columns if c in result_df.columns]
+                        if not return_columns:  # If no valid columns remain
+                            print("No valid columns to return, using all columns")
+                        else:
+                            result_df = result_df[return_columns]
+                    else:
+                        result_df = result_df[return_columns]
+                # ─────────────────────────────────────────────────────────
+                
+                # Verify result_df is not empty
+                if result_df.empty:
+                    return {
+                        "answer": f"No matching data found in '{file_name}' for your query.",
+                        "type": "text",
+                        "file_context": file_name  # Preserve file context even for empty results
+                    }
+                
+                # Determine download format based on original file extension
+                _, original_ext = os.path.splitext(file_name.lower())
+                download_filename = f"filtered_{os.path.splitext(file_name)[0]}{original_ext}"
+                
+                # Adjust the answer based on duplicate handling
+                duplicate_info = " (showing unique records)" if drop_duplicates else ""
+                
+                return {
+                    "answer": f"Filtered data from '{file_name}'" + (f" (sheet: {sheet_name})" if sheet_name else "") + 
+                             f"{duplicate_info}. Results below:",
+                    "type": "table", # Frontend will render this as a table
+                    "data": result_df.to_dict(orient="records"), # Send data for frontend table
+                    "columns": [str(col) for col in result_df.columns.tolist()],
+                    "download_available": True,
+                    "download_filename": download_filename, # For /download endpoint
+                    "file_context": file_name, # Keep context of original file
+                    "query_params_for_download": query_params,
+                    "sheet_name_for_download": sheet_name,
+                    "drop_duplicates_for_download": drop_duplicates,
+                    "subset_for_download": subset,
+                    "return_columns_for_download": return_columns if return_columns else None
+                }
             except Exception as e:
                 print(f"DEBUG: Execute_filtered_query failed with error: {str(e)}")
                 raise
             
-            # Verify result_df is not empty
-            if result_df.empty:
-                return {
-                    "answer": f"No matching data found in '{file_name}' for your query.",
-                    "type": "text",
-                    "file_context": file_name  # Preserve file context even for empty results
-                }
-            
-            # Determine download format based on original file extension
-            _, original_ext = os.path.splitext(file_name.lower())
-            download_filename = f"filtered_{os.path.splitext(file_name)[0]}{original_ext}"
-            
-            # Adjust the answer based on duplicate handling
-            duplicate_info = " (showing unique records)" if drop_duplicates else ""
-            
-            return {
-                "answer": f"Filtered data from '{file_name}'" + (f" (sheet: {sheet_name})" if sheet_name else "") + 
-                         f"{duplicate_info}. Results below:",
-                "type": "table", # Frontend will render this as a table
-                "data": result_df.to_dict(orient="records"), # Send data for frontend table
-                "columns": [str(col) for col in result_df.columns.tolist()],
-                "download_available": True,
-                "download_filename": download_filename, # For /download endpoint
-                "file_context": file_name, # Keep context of original file
-                "query_params_for_download": query_params,
-                "sheet_name_for_download": sheet_name,
-                "drop_duplicates_for_download": drop_duplicates,
-                "subset_for_download": subset
-            }
         except Exception as e:
             print(f"Error in filter_structured_data: {str(e)}")  # Add debug print
             return {

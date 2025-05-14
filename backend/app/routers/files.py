@@ -185,8 +185,23 @@ async def download_processed_file(request: FileProcessRequest):
         df = execute_filtered_query(
             filename=request.original_filename,
             query_params=request.query_params, # This needs to be passed from frontend if dynamic
-            sheet_name=request.sheet_name
+            sheet_name=request.sheet_name,
+            drop_duplicates=request.drop_duplicates,
+            subset=request.subset
         )
+        
+        # Apply column filtering if specified
+        if request.return_columns:
+            # Handle both string and list formats
+            return_cols = request.return_columns
+            if isinstance(return_cols, str):
+                return_cols = [return_cols]
+                
+            # Check for invalid columns and filter them out
+            valid_cols = [col for col in return_cols if col in df.columns]
+            if valid_cols:
+                df = df[valid_cols]
+            # If no valid columns remain, use all columns (default behavior)
 
         _, ext = os.path.splitext(request.filename.lower())
         content_type = ""
@@ -231,6 +246,24 @@ async def download_filtered_data(request: FileProcessRequest):
             drop_duplicates=request.drop_duplicates,
             subset=request.subset
         )
+        
+        # Apply column filtering if specified
+        if request.return_columns:
+            # Handle both string and list formats
+            return_cols = request.return_columns
+            if isinstance(return_cols, str):
+                return_cols = [return_cols]
+                
+            # Check for invalid columns and filter them out
+            missing_cols = [col for col in return_cols if col not in df.columns]
+            if missing_cols:
+                print(f"Warning: Requested columns not found in data: {missing_cols}")
+                
+            # Filter to only include valid columns
+            valid_cols = [col for col in return_cols if col in df.columns]
+            if valid_cols:
+                df = df[valid_cols]
+            # If no valid columns remain, use all columns (default behavior)
 
         _, ext = os.path.splitext(request.filename_to_download.lower())
         file_bytes_io = None

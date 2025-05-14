@@ -19,6 +19,7 @@ class QueryResponse(BaseModel):
     sheet_name_for_download: Optional[str] = Field(default=None, description="Sheet name, if applicable, for downloadable table")
     drop_duplicates_for_download: Optional[bool] = Field(default=False, description="Whether to drop duplicate rows in the downloaded file")
     subset_for_download: Optional[List[str]] = Field(default=None, description="List of columns to consider when removing duplicates")
+    return_columns_for_download: Optional[List[str]] = Field(default=None, description="Specific columns to include in the downloaded file")
     sources: Optional[str] = None # For RAG source documents
 
 class FileProcessRequest(BaseModel):
@@ -28,3 +29,4 @@ class FileProcessRequest(BaseModel):
     sheet_name: Optional[str] = None
     drop_duplicates: Optional[bool] = Field(default=False, description="Whether to drop duplicate rows")
     subset: Optional[List[str]] = Field(default=None, description="List of columns to consider when removing duplicates")
+    return_columns: Optional[List[str]] = Field(default=None, description="Specific columns to include in the downloaded file")
