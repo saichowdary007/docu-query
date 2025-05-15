@@ -61,14 +61,22 @@ export function FileProvider({ children }: { children: ReactNode }) {
         debugLog('Current active file:', activeFile);
         debugLog('User manually selected?', isManualSelection.current);
         
+        // If there's only one file, always select it automatically
+        if (newFiles.length === 1 && (!activeFile || activeFile !== newFiles[0].filename)) {
+          const onlyFile = newFiles[0].filename;
+          logFileSelection(onlyFile, 'auto-select-only-file');
+          setActiveFile(onlyFile);
+          // Don't mark as manual selection so it can be overridden if more files are added
+          isManualSelection.current = false;
+        }
         // Only set default file on initial load when there are no selections yet
-        if (!initialLoadComplete.current && newFiles.length > 0 && !activeFile) {
+        else if (!initialLoadComplete.current && newFiles.length > 0 && !activeFile) {
           // First time loading, auto-select first file
           const firstFile = newFiles[0].filename;
           logFileSelection(firstFile, 'initial-load');
           setActiveFile(firstFile);
           initialLoadComplete.current = true;
-        } 
+        }
         // If we had a manually selected file, verify it still exists
         else if (activeFile && isManualSelection.current) {
           const fileStillExists = newFiles.some((file: StoredFile) => file.filename === activeFile);

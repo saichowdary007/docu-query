@@ -125,14 +125,18 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
     Or for multiple conditions:
     query_params example: [
         {"column": "Gender", "operator": "==", "value": "Male"},
-        {"column": "Age", "operator": ">", "value": 36}
+        {"column": "Age", "operator": ">", "value": "36"}
     ]
     
     Special cases:
     - If query_params is an empty list [], returns all records without filtering
     """
+    print(f"execute_filtered_query called with: filename={filename}, query_params={query_params}, " 
+          f"sheet_name={sheet_name}, drop_duplicates={drop_duplicates}, subset={subset}")
+    
     data = load_structured_file(filename)
     if data is None:
+        print(f"Error: File {filename} not found or could not be loaded")
         raise ValueError("File not found or not loaded for querying.")
 
     # Determine if this is a CSV file

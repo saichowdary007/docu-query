@@ -316,7 +316,7 @@ async def process_query(user_query: str, file_context: str = None):
                 # Adjust the answer based on duplicate handling
                 duplicate_info = " (showing unique records)" if drop_duplicates else ""
                 
-                return {
+                result_response = {
                     "answer": f"Filtered data from '{file_name}'" + (f" (sheet: {sheet_name})" if sheet_name else "") + 
                              f"{duplicate_info}. Results below:",
                     "type": "table", # Frontend will render this as a table
@@ -331,6 +331,12 @@ async def process_query(user_query: str, file_context: str = None):
                     "subset_for_download": subset,
                     "return_columns_for_download": return_columns if return_columns else None
                 }
+                
+                # Log the response shape for debugging
+                print(f"DEBUG: Query response fields: {list(result_response.keys())}")
+                print(f"DEBUG: return_columns_for_download value: {result_response['return_columns_for_download']}")
+                
+                return result_response
             except Exception as e:
                 print(f"DEBUG: Execute_filtered_query failed with error: {str(e)}")
                 raise

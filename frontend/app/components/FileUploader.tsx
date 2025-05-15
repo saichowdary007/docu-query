@@ -21,7 +21,11 @@ export interface StoredFile {
   is_structured: boolean
 }
 
-export default function FileUploader() {
+interface FileUploaderProps {
+  onFileUploaded?: () => void
+}
+
+export default function FileUploader({ onFileUploaded }: FileUploaderProps = {}) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [deletingFiles, setDeletingFiles] = useState<string[]>([])
@@ -40,8 +44,8 @@ export default function FileUploader() {
     try {
       const success = await deleteFile(filename)
       if (success) {
-        // Deletion handled by the context
-        // Force refresh files after a short delay to ensure backend processing is complete
+        // File deletion handled by the context
+        // Force refresh files
         setTimeout(() => {
           fetchFiles()
         }, 300)
@@ -132,6 +136,11 @@ export default function FileUploader() {
       
       // Auto-clear successful uploads after 5 seconds
       setTimeout(clearSuccessfulUploads, 5000)
+      
+      // Notify parent component about successful upload
+      if (onFileUploaded && data.processed_files?.length > 0) {
+        onFileUploaded()
+      }
     } catch (error) {
       console.error('Upload error:', error)
       // Clear progress intervals
@@ -145,7 +154,7 @@ export default function FileUploader() {
     } finally {
       setIsUploading(false)
     }
-  }, [isUploading, fetchFiles])
+  }, [isUploading, fetchFiles, onFileUploaded])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -199,9 +208,9 @@ export default function FileUploader() {
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
       className="relative bg-white dark:bg-gray-950 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 h-full flex flex-col transition-colors duration-200 w-full overflow-hidden"
     >
       <BorderBeam
@@ -251,6 +260,7 @@ export default function FileUploader() {
                     <div className="flex-1 truncate text-sm text-gray-700 dark:text-gray-300">
                       {file.filename}
                     </div>
+                    
                     <motion.button
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
@@ -276,94 +286,94 @@ export default function FileUploader() {
           </div>
         )}
 
-        <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
-            Upload New Files
-          </h3>
-          {/* Dropzone */}
-          <div
-            {...getRootProps()}
-            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
-              isDragActive 
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'border-gray-300 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500'
-            }`}
-          >
-            <input {...getInputProps()} />
-            <CloudArrowUpIcon className={`h-10 w-10 mx-auto mb-2 ${
-              isDragActive 
-                ? 'text-blue-500 dark:text-blue-400' 
-                : 'text-gray-400 dark:text-gray-500'
-            }`} />
-            {isDragActive ? (
-              <p className="text-blue-500 dark:text-blue-400 font-medium">Drop the files here...</p>
-            ) : (
-              <div>
-                <p className="text-gray-600 dark:text-gray-300">Drag & drop files here, or click to select files</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Supported: PDF, DOCX, PPTX, TXT, MD, CSV, XLSX, XLS
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Current Upload Status */}
-        {uploadedFiles.length > 0 && (
+        {/* Upload section */}
+        <>
           <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent Uploads</h3>
-            <div className="space-y-2 max-h-32 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-800">
-              {uploadedFiles.map((file, index) => (
-                <motion.div
-                  key={`${file.name}-${index}`}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: 0.1 * index }}
-                  className={`flex items-center p-2 ${
-                    index !== uploadedFiles.length - 1 ? 'border-b border-gray-100 dark:border-gray-900' : ''
-                  } ${
-                    file.status === 'success' ? 'bg-green-50 dark:bg-green-900/20' : 
-                    file.status === 'error' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-950'
-                  }`}
-                >
-                  <span className="mr-2">{getStatusIcon(file.status)}</span>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center">
-                      <span className="truncate text-sm font-medium text-gray-700 dark:text-gray-300">{file.name}</span>
-                    </div>
-                    
-                    {file.status === 'uploading' && file.progress !== undefined && (
-                      <div className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden mt-1">
-                        <div 
-                          className="h-full bg-blue-500 dark:bg-blue-600 rounded-full" 
-                          style={{ width: `${file.progress}%` }}
-                        ></div>
-                      </div>
-                    )}
-                    
-                    {file.error && (
-                      <span className="text-xs text-red-500 dark:text-red-400">{file.error}</span>
-                    )}
-                  </div>
-                  
-                  {file.status === 'success' && (
-                    <span className="text-xs text-green-600 dark:text-green-400 ml-2">Complete</span>
-                  )}
-                </motion.div>
-              ))}
+            <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
+              Upload New Files
+            </h3>
+            {/* Dropzone */}
+            <div
+              {...getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
+                isDragActive 
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                  : 'border-gray-300 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500'
+              }`}
+            >
+              <input {...getInputProps()} />
+              <CloudArrowUpIcon className={`h-10 w-10 mx-auto mb-2 ${
+                isDragActive 
+                  ? 'text-blue-500 dark:text-blue-400' 
+                  : 'text-gray-400 dark:text-gray-500'
+              }`} />
+              {isDragActive ? (
+                <p className="text-blue-500 dark:text-blue-400 font-medium">Drop the files here...</p>
+              ) : (
+                <div>
+                  <p className="text-gray-600 dark:text-gray-300">Drag & drop files here, or click to select files</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Supported: PDF, DOCX, PPTX, TXT, MD, CSV, XLSX, XLS
+                  </p>
+                </div>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Upload Complete Message */}
-        {!isUploading && uploadedFiles.some(file => file.status === 'success') && (
-          <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-            <p className="text-green-700 dark:text-green-400 text-sm">
-              Files uploaded successfully! Select a file above to start chatting.
-            </p>
-          </div>
-        )}
+          {/* Current Upload Status */}
+          {uploadedFiles.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
+                Current Uploads
+              </h3>
+              <div className="space-y-2">
+                {uploadedFiles.map((file, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    className="flex items-center p-2 bg-white dark:bg-gray-950 rounded-md border border-gray-200 dark:border-gray-800"
+                  >
+                    <div className="mr-2">{getStatusIcon(file.status)}</div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center">
+                        <span className="truncate text-sm font-medium text-gray-700 dark:text-gray-300">{file.name}</span>
+                      </div>
+                      
+                      {file.status === 'uploading' && file.progress !== undefined && (
+                        <div className="w-full h-1 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden mt-1">
+                          <div 
+                            className="h-full bg-blue-500 dark:bg-blue-600 rounded-full" 
+                            style={{ width: `${file.progress}%` }}
+                          ></div>
+                        </div>
+                      )}
+                      
+                      {file.error && (
+                        <span className="text-xs text-red-500 dark:text-red-400">{file.error}</span>
+                      )}
+                    </div>
+                    
+                    {file.status === 'success' && (
+                      <span className="text-xs text-green-600 dark:text-green-400 ml-2">Complete</span>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload Complete Message */}
+          {!isUploading && uploadedFiles.some(file => file.status === 'success') && (
+            <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+              <p className="text-green-700 dark:text-green-400 text-sm">
+                Files uploaded successfully! Select a file above to start chatting.
+              </p>
+            </div>
+          )}
+        </>
       </div>
     </motion.div>
   )

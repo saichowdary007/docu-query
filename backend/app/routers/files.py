@@ -233,22 +233,53 @@ async def download_processed_file(request: FileProcessRequest):
 @router.post("/download-filtered/", dependencies=[Depends(get_api_key)])
 async def download_filtered_data(request: FileProcessRequest):
     try:
-        if not request.original_filename or not request.query_params or not request.filename_to_download:
-             raise HTTPException(status_code=400, detail="Missing parameters for download.")
+        # More verbose logging for debugging
+        print(f"Download request received: {request.model_dump()}")
+        
+        # Check each required parameter separately for better error messages
+        errors = []
+        if not request.original_filename:
+            errors.append("Missing 'original_filename' parameter")
+        
+        # Allow empty list/dict for query_params, but not None
+        if request.query_params is None:
+            errors.append("Missing 'query_params' parameter")
+        
+        if not request.filename_to_download:
+            errors.append("Missing 'filename_to_download' parameter")
+            
+        if errors:
+            error_msg = "; ".join(errors)
+            print(f"Parameter validation failed: {error_msg}")
+            raise HTTPException(status_code=400, detail=f"Missing parameters for download: {error_msg}")
 
         # Handle both single condition and list of conditions
         query_params = request.query_params
         
-        df = execute_filtered_query(
-            filename=request.original_filename,
-            query_params=query_params,
-            sheet_name=request.sheet_name,
-            drop_duplicates=request.drop_duplicates,
-            subset=request.subset
-        )
+        # Print data type of query_params for debugging
+        print(f"query_params type: {type(query_params)}, value: {query_params}")
+        
+        # Normalize query_params to be a list if it's a dict
+        if isinstance(query_params, dict):
+            query_params = [query_params]  # Wrap single dict in a list
+        elif query_params is None:
+            query_params = []  # Default to empty list
+            
+        try:
+            df = execute_filtered_query(
+                filename=request.original_filename,
+                query_params=query_params,
+                sheet_name=request.sheet_name,
+                drop_duplicates=request.drop_duplicates,
+                subset=request.subset
+            )
+        except Exception as e:
+            print(f"Execute_filtered_query failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Error filtering data: {str(e)}")
         
         # Apply column filtering if specified
         if request.return_columns:
+            print(f"Return columns specified: {request.return_columns}")
             # Handle both string and list formats
             return_cols = request.return_columns
             if isinstance(return_cols, str):
@@ -262,8 +293,13 @@ async def download_filtered_data(request: FileProcessRequest):
             # Filter to only include valid columns
             valid_cols = [col for col in return_cols if col in df.columns]
             if valid_cols:
+                print(f"Filtering columns to: {valid_cols}")
                 df = df[valid_cols]
+            else:
+                print(f"No valid columns to filter, using all columns")
             # If no valid columns remain, use all columns (default behavior)
+        else:
+            print("No return_columns specified, using all columns")
 
         _, ext = os.path.splitext(request.filename_to_download.lower())
         file_bytes_io = None
@@ -284,9 +320,12 @@ async def download_filtered_data(request: FileProcessRequest):
             headers={"Content-Disposition": f"attachment; filename={request.filename_to_download}"}
         )
     except ValueError as e:
+        print(f"Download ValueError: {e}")
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        print(f"Download error: {e}") # Log error
+        print(f"Download error: {e}, type: {type(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error preparing file for download: {str(e)}")
 
 

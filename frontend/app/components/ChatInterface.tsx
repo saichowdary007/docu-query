@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { PaperAirplaneIcon, ArrowDownTrayIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowDownTrayIcon, DocumentTextIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { BorderBeam } from './ui/border-beam'
 import { apiUrls, getApiKey } from '../lib/api'
@@ -21,8 +21,12 @@ interface Message {
   sheet_name_for_download?: string
   drop_duplicates_for_download?: boolean
   subset_for_download?: string[]
+  return_columns_for_download?: string[] | null
   timestamp?: number
 }
+
+// Maximum rows to display in the collapsed view
+const MAX_ROWS_COLLAPSED = 10
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
@@ -35,6 +39,8 @@ export default function ChatInterface() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
+  // Track expanded state for each message by its index
+  const [expandedMessages, setExpandedMessages] = useState<Record<number, boolean>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [parent] = useAutoAnimate()
@@ -118,21 +124,19 @@ export default function ChatInterface() {
           'Content-Type': 'application/json',
           'X-API-KEY': apiKey,
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           query: userMessage,
-          file_context: activeFile // Send the selected file to query
+          file_context: activeFile
         }),
       })
 
-      console.log('Chat query response status:', response.status)
-
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Chat query error response:', errorText)
-        throw new Error(`Failed to get response: ${response.status} ${errorText}`)
+        throw new Error('Failed to get response')
       }
 
       const data = await response.json()
+      console.log("API Response data:", data);  // Log the raw API response data
+      console.log("Return columns from API:", data.return_columns_for_download);
       
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -147,6 +151,7 @@ export default function ChatInterface() {
         sheet_name_for_download: data.sheet_name_for_download,
         drop_duplicates_for_download: data.drop_duplicates_for_download,
         subset_for_download: data.subset_for_download,
+        return_columns_for_download: data.return_columns_for_download,
         timestamp: Date.now()
       }])
     } catch (error) {
@@ -167,23 +172,37 @@ export default function ChatInterface() {
     try {
       const apiKey = getApiKey()
       
+      // Log the message object to see what's available
+      console.log("Download message data:", message);
+      
+      // Create a clean request body with default values where needed
+      const requestBody = {
+        filename_to_download: message.download_filename,
+        original_filename: message.file_context,
+        query_params: message.query_params_for_download || [], // Default to empty array if undefined
+        sheet_name: message.sheet_name_for_download,
+        drop_duplicates: message.drop_duplicates_for_download || false,
+        subset: message.subset_for_download || null,
+        return_columns: message.return_columns_for_download || null
+      };
+      
+      // Log the actual request data
+      console.log("Sending download request:", requestBody);
+      
       const response = await fetch(apiUrls.fileDownload, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-API-KEY': apiKey,
         },
-        body: JSON.stringify({
-          filename_to_download: message.download_filename,
-          original_filename: message.file_context,
-          query_params: message.query_params_for_download,
-          sheet_name: message.sheet_name_for_download,
-          drop_duplicates: message.drop_duplicates_for_download,
-          subset: message.subset_for_download
-        }),
+        body: JSON.stringify(requestBody),
       })
 
-      if (!response.ok) throw new Error('Download failed')
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Download API error:', errorText);
+        throw new Error('Download failed: ' + errorText);
+      }
 
       // Create a blob from the response
       const blob = await response.blob()
@@ -195,9 +214,9 @@ export default function ChatInterface() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Download error:', error)
-      alert('Failed to download file')
+      alert('Failed to download file: ' + error.message)
     }
   }
 
@@ -209,7 +228,28 @@ export default function ChatInterface() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  const renderMessage = (message: Message) => {
+  // Toggle expanded state for a specific message
+  const toggleExpanded = (index: number) => {
+    setExpandedMessages(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }))
+  }
+
+  const renderMessage = (message: Message, index: number) => {
+    // Check if this is a large table that should be collapsed
+    const isLargeTable = message.type === 'table' && message.data && message.data.length > MAX_ROWS_COLLAPSED
+    
+    // Get expanded state for this message
+    const isExpanded = expandedMessages[index] || false
+    
+    // Calculate how many rows to display based on expanded state
+    const visibleRows = message.data
+      ? (isLargeTable && !isExpanded
+          ? message.data.slice(0, MAX_ROWS_COLLAPSED)
+          : message.data)
+      : []
+        
     if (message.role === 'user') {
       return (
         <motion.div 
@@ -251,9 +291,9 @@ export default function ChatInterface() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    {message.columns.map((column, index) => (
+                    {message.columns.map((column, colIndex) => (
                       <th
-                        key={index}
+                        key={colIndex}
                         className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         {column}
@@ -262,7 +302,7 @@ export default function ChatInterface() {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {message.data.map((row, rowIndex) => (
+                  {visibleRows.map((row, rowIndex) => (
                     <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900'}>
                       {message.columns && message.columns.map((column, colIndex) => (
                         <td
@@ -276,6 +316,29 @@ export default function ChatInterface() {
                   ))}
                 </tbody>
               </table>
+              
+              {isLargeTable && message.data && (
+                <div className="flex justify-center py-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => toggleExpanded(index)}
+                    className="flex items-center px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    {isExpanded ? (
+                      <>
+                        <ChevronUpIcon className="h-4 w-4 mr-1" />
+                        Show Less ({message.data.length} total rows)
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDownIcon className="h-4 w-4 mr-1" />
+                        Show More ({message.data.length - MAX_ROWS_COLLAPSED} more rows)
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+              )}
             </div>
           )}
 
@@ -340,7 +403,7 @@ export default function ChatInterface() {
       >
         {messages.map((message, index) => (
           <div key={index}>
-            {renderMessage(message)}
+            {renderMessage(message, index)}
           </div>
         ))}
         
