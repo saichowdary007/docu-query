@@ -188,3 +188,58 @@ import { BorderBeam } from '@/app/components/ui/border-beam';
 - `colorFrom`: Start color of the gradient (default: "#ffaa40")
 - `colorTo`: End color of the gradient (default: "#9c40ff")
 - `reverse`: Reverse animation direction (default: false)
+
+## Deployment Instructions
+
+### Deploying to Vercel
+
+1. **Setup Vercel Environment Variables**:
+   - Go to your Vercel project settings
+   - Add the following environment variables:
+     - `NEXT_PUBLIC_BACKEND_URL`: URL of your backend API (e.g., https://your-backend-api.com)
+     - `NEXT_PUBLIC_BACKEND_API_KEY`: Secret API key for backend authentication
+
+2. **Deploy from GitHub**:
+   - Connect your repository to Vercel
+   - Use the following build settings:
+     - Build Command: `npm run build`
+     - Output Directory: `frontend/.next`
+     - Install Command: `npm install`
+
+3. **Troubleshooting Common Issues**:
+   - If you see "next: command not found" error, ensure your package.json has `"build": "cd frontend && npm install && npm run build"`
+   - Make sure your vercel.json is correctly configured
+   - Check that your frontend/next.config.js has proper backend URL configuration
+
+### Backend Deployment
+
+1. Deploy the backend separately to a service like Render or use Vercel Serverless Functions
+2. Update the `NEXT_PUBLIC_BACKEND_URL` in your Vercel environment to point to your backend
+
+## Local Development
+
+```bash
+# Install dependencies
+npm install
+cd frontend && npm install
+
+# Run frontend and backend concurrently
+npm run dev
+
+# Run frontend only
+npm run dev:frontend
+
+# Run backend only
+npm run dev:backend
+```
+
+## Project Structure
+
+- `frontend/`: Next.js application
+- `backend/`: FastAPI application for document processing and querying
+
+## Technologies Used
+
+- **Frontend**: Next.js, React, TailwindCSS, Framer Motion
+- **Backend**: FastAPI, LangChain, FAISS, Python
+- **Document Processing**: LangChain document loaders and processors
