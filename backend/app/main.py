@@ -4,12 +4,12 @@ from app.core.config import settings
 from app.routers import chat, files, auth
 from app.core.security import get_api_key # For global dependency if needed
 from app.services.vector_store import initialize_vector_store, FAISS_INDEX_PATH # Corrected import
-from app.core.database import Base, engine
+from app.core.database import Base, engine, init_db
 import os
 
 
-# Create database tables if they don't exist
-Base.metadata.create_all(bind=engine)
+# We're moving database initialization to startup event, so remove this line
+# init_db()
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -18,6 +18,7 @@ origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 # Add development and production origins
 default_origins = [
     "http://localhost:3000",
+    "http://frontend:3000",    # Add Docker container service name for docker-compose networking
     "https://docuquery-ai.vercel.app",     # Production Vercel URL
     "https://docuquery-ai-git-main.vercel.app",  # Vercel preview branch URL
 ]
@@ -37,6 +38,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
+    # Initialize database tables
+    init_db()
+    
     # Initialize vector store on startup if index exists
     # This avoids re-initializing an empty one if data is already there.
     if os.path.exists(FAISS_INDEX_PATH) and os.listdir(FAISS_INDEX_PATH):
