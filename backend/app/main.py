@@ -1,11 +1,15 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routers import chat, files
+from app.routers import chat, files, auth
 from app.core.security import get_api_key # For global dependency if needed
 from app.services.vector_store import initialize_vector_store, FAISS_INDEX_PATH # Corrected import
+from app.core.database import Base, engine
 import os
 
+
+# Create database tables if they don't exist
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -49,6 +53,7 @@ async def startup_event():
 
 app.include_router(files.router, prefix=settings.API_V1_STR + "/files", tags=["Files"])
 app.include_router(chat.router, prefix=settings.API_V1_STR + "/chat", tags=["Chat"])
+app.include_router(auth.router, prefix=settings.API_V1_STR + "/auth", tags=["Auth"])
 
 @app.get("/")
 async def root():

@@ -20,5 +20,10 @@ markdown
 requests
 python-dotenv
 numpy
+# Authentication dependencies
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+email-validator
 # For Tika (optional, more complex setup)
 # tika

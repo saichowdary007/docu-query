@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -15,6 +13,8 @@ services:
       - GOOGLE_LOCATION=${GOOGLE_LOCATION:-us-central1}
       - BACKEND_API_KEY=${BACKEND_API_KEY:-secret_api_key_123}
       - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+      - GOOGLE_CLIENT_ID=957540041315-jiuka63ajki08v8d85pusekdtar0qm5c.apps.googleusercontent.com
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your_jwt_secret_key}
       # If using service account key:
       # - GOOGLE_APPLICATION_CREDENTIALS=/app/path/to/your-service-account-key.json
     # If using service account key file:
@@ -28,6 +28,11 @@ services:
     environment:
       - NEXT_PUBLIC_BACKEND_API_KEY=${BACKEND_API_KEY:-secret_api_key_123}
       - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=957540041315-jiuka63ajki08v8d85pusekdtar0qm5c.apps.googleusercontent.com
+      # Ensure Next.js server listens on all interfaces
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - NODE_ENV=production
     depends_on:
       - backend
 

@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ThemeProvider } from "@/app/theme-provider"
 import { FileProvider } from "@/app/lib/contexts"
+import { AuthProvider } from "@/app/lib/auth-context"
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -24,9 +25,11 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className={`${inter.className} dark:bg-black`} suppressHydrationWarning>
         <ThemeProvider>
-          <FileProvider>
-            {children}
-          </FileProvider>
+          <AuthProvider>
+            <FileProvider>
+              {children}
+            </FileProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

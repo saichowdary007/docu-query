@@ -20,6 +20,17 @@ const nextConfig = {
       },
     ]
   },
+  // Ensure the server listens on all network interfaces in Docker
+  // The experimental.outputStandalone has been moved to the top-level 'output: "standalone"' key
+}
+
+// In docker environment, we need to set the hostname
+if (process.env.NODE_ENV === 'production') {
+  // This ensures the server binds to 0.0.0.0 instead of localhost in Docker
+  nextConfig.experimental = {
+    ...(nextConfig.experimental || {}), // Initialize experimental if it's not already defined
+    outputFileTracingRoot: undefined,
+  }
 }
 
 module.exports = nextConfig
