@@ -119,7 +119,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isLoading: false,
         error: null
       })
-      return
+      return false // Return false to indicate refresh failed
     }
     
     try {
@@ -152,6 +152,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             isLoading: false,
             error: null
           })
+          return true // Return true to indicate refresh succeeded
         } else {
           throw new Error('Failed to load user profile')
         }
@@ -169,6 +170,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Clear invalid tokens
       Cookies.remove(TOKEN_COOKIE)
       Cookies.remove(REFRESH_TOKEN_COOKIE)
+      return false // Return false to indicate refresh failed
     }
   }
   

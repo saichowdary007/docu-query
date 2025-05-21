@@ -199,22 +199,27 @@ import { BorderBeam } from '@/app/components/ui/border-beam';
      - `NEXT_PUBLIC_BACKEND_URL`: URL of your backend API (e.g., https://your-backend-api.com)
      - `NEXT_PUBLIC_BACKEND_API_KEY`: Secret API key for backend authentication
 
-2. **Deploy from GitHub**:
-   - Connect your repository to Vercel
-   - Use the following build settings:
-     - Build Command: `npm run build`
-     - Output Directory: `frontend/.next`
-     - Install Command: `npm install`
+### Deploying to Render
 
-3. **Troubleshooting Common Issues**:
-   - If you see "next: command not found" error, ensure your package.json has `"build": "cd frontend && npm install && npm run build"`
-   - Make sure your vercel.json is correctly configured
-   - Check that your frontend/next.config.js has proper backend URL configuration
+1. **Setup Render Blueprint**:
+   - The included `render.yaml` file configures the deployment
+   - It will automatically create database and necessary services
 
-### Backend Deployment
+2. **Environment Variables**:
+   - Most variables are automatically set through the blueprint
+   - Custom variables like API keys need to be set in the Render dashboard
 
-1. Deploy the backend separately to a service like Render or use Vercel Serverless Functions
-2. Update the `NEXT_PUBLIC_BACKEND_URL` in your Vercel environment to point to your backend
+3. **Default Admin User**:
+   - On first deployment, an admin user is automatically created 
+   - Default email: `admin@docuquery.ai` (can be customized via `SEED_ADMIN_EMAIL`)
+   - Password: Auto-generated (view in Render logs or set via `SEED_ADMIN_PASSWORD`)
+   - Use these credentials for the initial login
+   - Create additional users through the application
+
+4. **Important Notes**:
+   - Database setup happens automatically on first deployment
+   - Uploaded files are stored in a persistent disk
+   - API documentation available at `/docs` endpoint
 
 ## Local Development
 

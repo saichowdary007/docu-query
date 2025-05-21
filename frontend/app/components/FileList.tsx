@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { apiUrls, getApiKey } from '../lib/api'
+import { fetchWithAuth } from '../lib/fetch-with-auth'
 
 interface FileInfo {
   filename: string
@@ -31,7 +32,7 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
     setError(null)
     try {
       const apiKey = getApiKey()
-      const response = await fetch(apiUrls.filesList, {
+      const response = await fetchWithAuth(apiUrls.filesList, {
         method: 'GET',
         headers: {
           'X-API-KEY': apiKey,
@@ -46,7 +47,7 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
       setFiles(data.files || [])
     } catch (err) {
       console.error('Error fetching files:', err)
-      setError('Failed to load files')
+      setError('Failed to load files. Please ensure you are logged in.')
     } finally {
       setIsLoading(false)
     }
@@ -97,7 +98,7 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
 
     try {
       const apiKey = getApiKey()
-      const response = await fetch(apiUrls.fileDelete(filename), {
+      const response = await fetchWithAuth(apiUrls.fileDelete(filename), {
         method: 'DELETE',
         headers: {
           'X-API-KEY': apiKey,

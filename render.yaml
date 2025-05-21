@@ -23,6 +23,14 @@ services:
         sync: false # Requires manual setup in the Render dashboard if you use a database
       - key: PORT
         value: 8000
+      - key: JWT_SECRET_KEY
+        generateValue: true # Auto-generate a secure JWT secret
+      - key: SEED_ADMIN_EMAIL
+        value: admin@docuquery.ai # Set default admin email
+      - key: SEED_ADMIN_PASSWORD
+        generateValue: true # Auto-generate a secure admin password
+      - key: SEED_ADMIN_NAME
+        value: Admin User
     disk:
       name: data
       mountPath: /app/vector_db_data

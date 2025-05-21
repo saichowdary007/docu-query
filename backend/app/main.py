@@ -6,6 +6,7 @@ import os
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.database_migration import run_migrations
+from app.core.database_seed import seed_admin_user
 from app.routers import auth, files, queries, users
 
 app = FastAPI(
@@ -55,6 +56,9 @@ async def startup_event():
     """
     # Initialize database tables
     init_db()
+    
+    # Seed admin user if database is empty
+    seed_admin_user()
     
     # Run data migrations
     run_migrations()
