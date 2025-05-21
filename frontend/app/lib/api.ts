@@ -10,7 +10,7 @@ export const getApiBaseUrl = () => {
 // Construct API URLs
 export const apiUrls = {
   // Chat and file endpoints
-  chat: `${getApiBaseUrl()}/api/v1/chat/query`,
+  chat: `${getApiBaseUrl()}/api/v1/queries/query`,
   fileUpload: `${getApiBaseUrl()}/api/v1/files/upload`,
   filesList: `${getApiBaseUrl()}/api/v1/files/uploaded-files`,
   fileDelete: (filename: string) => `${getApiBaseUrl()}/api/v1/files/delete/${filename}`,

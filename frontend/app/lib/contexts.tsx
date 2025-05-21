@@ -189,8 +189,8 @@ export function FileProvider({ children }: { children: ReactNode }) {
     // Initial fetch
     fetchFiles()
     
-    // Set up polling for refreshing files list
-    const interval = setInterval(fetchFiles, 5000)
+    // Set up polling for refreshing files list - increase interval to reduce frequency of requests
+    const interval = setInterval(fetchFiles, 15000) // Changed from 5000 to 15000 (15 seconds)
     return () => clearInterval(interval)
   }, [isAuthenticated]) // Re-run effect when authentication state changes
 

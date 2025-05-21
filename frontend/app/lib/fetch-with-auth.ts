@@ -5,6 +5,14 @@ const TOKEN_COOKIE = 'docuquery_token';
 const REFRESH_TOKEN_COOKIE = 'docuquery_refresh_token';
 
 /**
+ * Check if user is likely authenticated based on token presence
+ * This is a quick check to avoid unnecessary API calls
+ */
+const isLikelyAuthenticated = (): boolean => {
+  return !!Cookies.get(TOKEN_COOKIE);
+};
+
+/**
  * Wrapper around fetch that handles authentication
  * - Adds Authorization header with token
  * - Refreshes token if needed
@@ -15,6 +23,21 @@ export async function fetchWithAuth(
   options: RequestInit = {}, 
   retrying: boolean = false
 ): Promise<Response> {
+  // Quick check to avoid unnecessary API calls
+  if (!isLikelyAuthenticated() && !retrying && !url.includes('/auth/')) {
+    // Not authenticated and not trying to authenticate, redirect to login
+    if (typeof window !== 'undefined') {
+      console.log("User not authenticated, redirecting to login");
+      window.location.href = '/login';
+      
+      // Return a mock response to prevent further processing
+      return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
   const token = Cookies.get(TOKEN_COOKIE);
   
   // Add Authorization header if token exists

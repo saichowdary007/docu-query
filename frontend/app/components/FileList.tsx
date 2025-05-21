@@ -11,6 +11,7 @@ import { motion } from 'framer-motion'
 import { apiUrls, getApiKey } from '../lib/api'
 import { fetchWithAuth } from '../lib/fetch-with-auth'
 import { useAuth } from '../lib/auth-context'
+import Cookies from 'js-cookie'
 
 interface FileInfo {
   filename: string
@@ -27,16 +28,29 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
   const [files, setFiles] = useState<FileInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
   const { isAuthenticated } = useAuth()
 
   const fetchFiles = async () => {
-    if (!isAuthenticated) {
+    // Check if we have an access token, if not, don't try to fetch
+    const token = Cookies.get('docuquery_token')
+    if (!token || !isAuthenticated) {
+      setFiles([])
       setIsLoading(false)
+      setError(null)
       return
     }
 
+    // Implement rate limiting - don't fetch more than once every 5 seconds
+    const now = Date.now()
+    if (now - lastFetchTime < 5000) {
+      return
+    }
+    
+    setLastFetchTime(now)
     setIsLoading(true)
     setError(null)
+    
     try {
       const apiKey = getApiKey()
       const response = await fetchWithAuth(apiUrls.filesList, {
