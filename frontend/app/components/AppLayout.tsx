@@ -17,7 +17,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [mounted, setMounted] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const { resolvedTheme, setTheme } = useTheme()
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, isLoading, logout } = useAuth()
   const router = useRouter()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -26,6 +26,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
     setMounted(true)
     return () => {}
   }, [])
+
+  // Client-side authentication check to redirect when not authenticated
+  useEffect(() => {
+    // Only redirect after initial loading is complete and we're sure user isn't authenticated
+    if (mounted && !isLoading && !isAuthenticated) {
+      // Don't redirect if we're already on a public route
+      const publicRoutes = ['/login', '/register']
+      const pathname = window.location.pathname
+      
+      if (!publicRoutes.includes(pathname)) {
+        console.log('Not authenticated, redirecting to login page')
+        router.push('/login')
+      }
+    }
+  }, [mounted, isLoading, isAuthenticated, router])
 
   // Handle click outside dropdown
   useEffect(() => {
@@ -67,6 +82,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
     logout()
     setDropdownOpen(false)
     router.push('/login')
+  }
+
+  // Show loading state or only authenticated content
+  if (!mounted || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
   }
 
   return (
