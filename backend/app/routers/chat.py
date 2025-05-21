@@ -1,12 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.models.pydantic_models import QueryRequest, QueryResponse
 from app.services.query_engine import process_query
-from app.core.security import get_api_key
+from app.core.security import get_api_key, get_current_user
+from app.models.user import TokenPayload
 
 router = APIRouter()
 
-@router.post("/query/", response_model=QueryResponse, dependencies=[Depends(get_api_key)])
-async def handle_query(request: QueryRequest):
+@router.post("/query/")
+async def handle_query(
+    request: QueryRequest,
+    api_key: str = Depends(get_api_key),
+    current_user: TokenPayload = Depends(get_current_user)
+):
     """
     Handles user queries.
     Interprets natural language, maps to data extraction tasks (RAG or structured query).
@@ -19,7 +24,12 @@ async def handle_query(request: QueryRequest):
     sanitized_query = request.query # Add actual sanitization if needed
     
     try:
-        result = await process_query(sanitized_query, file_context=request.file_context)
+        # Pass the user ID to process_query
+        result = await process_query(
+            sanitized_query, 
+            file_context=request.file_context, 
+            user_id=current_user.sub
+        )
         # The `result` dict from process_query should align with QueryResponse fields
         return QueryResponse(**result)
     except Exception as e:

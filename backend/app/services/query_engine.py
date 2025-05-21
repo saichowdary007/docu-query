@@ -7,6 +7,7 @@ import json
 import os
 import pandas as pd
 from copy import deepcopy
+from typing import Optional
 
 # This is a crucial part: Intent recognition and dispatching
 # For a production system, this would be more sophisticated, possibly using
@@ -88,9 +89,10 @@ If the user asks to filter/extract from a structured file, ensure `file_name`, `
 JSON Response:
 """
 
-def get_qa_chain():
+def get_qa_chain(user_id: Optional[str] = None):
     llm = get_llm()
-    retriever = get_retriever()
+    # Pass user_id to get_retriever to filter by user
+    retriever = get_retriever(user_id=user_id)
     if not retriever:
         return None # Handle case where vector store is not ready
 
@@ -115,9 +117,10 @@ Helpful Answer:"""
     )
     return qa_chain
 
-async def process_query(user_query: str, file_context: str = None):
+async def process_query(user_query: str, file_context: str = None, user_id: Optional[str] = None):
     llm = get_llm()
-    retriever = get_retriever()
+    # Pass user_id to filter documents by user
+    retriever = get_retriever(user_id=user_id)
 
     if not retriever:
         return {"answer": "Vector store not initialized. Please upload files first.", "type": "text"}
@@ -138,7 +141,7 @@ async def process_query(user_query: str, file_context: str = None):
         # Try to load the file to confirm it exists
         try:
             # For structured files, this will load into cache if not present
-            structured_file = load_structured_file(file_context)
+            structured_file = load_structured_file(file_context, user_id=user_id)
             if structured_file is not None:
                 # File exists, add context about this being the selected file
                 file_is_structured = True
@@ -219,11 +222,11 @@ async def process_query(user_query: str, file_context: str = None):
                 raise ValueError("Missing file_name or column_name for list_column_values")
             
             # Verify file exists (load_structured_file will try to load it)
-            loaded_file = load_structured_file(file_name)  # Loads into cache if not present
+            loaded_file = load_structured_file(file_name, user_id=user_id)  # Loads into cache if not present
             if loaded_file is None:
                  return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
 
-            result_list = get_interactive_list(file_name, column_name, sheet_name)
+            result_list = get_interactive_list(file_name, column_name, sheet_name, user_id=user_id)
             if isinstance(result_list, list) and result_list and "Error:" in result_list[0]:
                 return {"answer": result_list[0], "type": "text"} # Propagate error message
             
@@ -267,7 +270,7 @@ async def process_query(user_query: str, file_context: str = None):
             return_columns = parameters.get("return_columns") or parameters.get("columns_to_return")
             
             # Load file to verify it exists
-            loaded_file = load_structured_file(file_name)
+            loaded_file = load_structured_file(file_name, user_id=user_id)
             if loaded_file is None:
                 return {"answer": f"File '{file_name}' not found or is not a recognized structured file.", "type": "text"}
 
@@ -275,11 +278,12 @@ async def process_query(user_query: str, file_context: str = None):
             print(f"DEBUG: Executing filter query on file {file_name}")
             try:
                 result_df = execute_filtered_query(
-                    file_name, 
-                    query_params, 
-                    sheet_name, 
+                    filename=file_name, 
+                    query_params=query_params, 
+                    sheet_name=sheet_name, 
                     drop_duplicates=drop_duplicates,
-                    subset=subset
+                    subset=subset,
+                    user_id=user_id
                 )
                 
                 print(f"DEBUG: Query successful, got DataFrame with {len(result_df)} rows")
@@ -356,7 +360,7 @@ async def process_query(user_query: str, file_context: str = None):
         # pass
 
     # Default: retrieve_general_info (or if intent detection failed)
-    qa_chain = get_qa_chain()
+    qa_chain = get_qa_chain(user_id=user_id)
     if not qa_chain:
         return {"answer": "QA system not ready. Please try again after uploading files.", "type": "text"}
     
@@ -378,7 +382,7 @@ async def process_query(user_query: str, file_context: str = None):
         if file_context:
             try:
                 # Use the already imported load_structured_file function
-                data = load_structured_file(file_context)
+                data = load_structured_file(file_context, user_id=user_id)
                 
                 row_count = 0
                 if isinstance(data, pd.DataFrame):  # CSV

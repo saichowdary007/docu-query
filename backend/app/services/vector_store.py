@@ -1,6 +1,6 @@
 from langchain_community.vectorstores import FAISS # or Chroma
 from langchain_core.documents import Document
-from typing import List
+from typing import List, Optional, Dict
 from app.services.nlp_service import get_embeddings_model
 from app.core.config import settings
 import os
@@ -52,12 +52,13 @@ def add_documents_to_store(documents: List[Document]):
     print(f"Saved FAISS index to {FAISS_INDEX_PATH}")
 
 
-def remove_documents_by_source(source: str):
+def remove_documents_by_source(source: str, user_id: Optional[str] = None):
     """
     Removes all documents from the vector store that have the given source.
     
     Args:
         source: The source identifier (usually the filename) to remove
+        user_id: Optional user ID to only remove documents for a specific user
     """
     global vector_store
     if not vector_store:
@@ -65,7 +66,8 @@ def remove_documents_by_source(source: str):
         if os.path.exists(FAISS_INDEX_PATH) and os.listdir(FAISS_INDEX_PATH):
             embeddings = get_embeddings_model()
             vector_store = FAISS.load_local(FAISS_INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
-            print(f"Loaded vector store to remove documents from source: {source}")
+            print(f"Loaded vector store to remove documents from source: {source}" + 
+                 (f" for user {user_id}" if user_id else ""))
         else:
             print(f"No vector store found to remove documents from source: {source}")
             return
@@ -82,11 +84,26 @@ def remove_documents_by_source(source: str):
         # Collect documents that don't match the source to keep
         for doc_id, doc in vector_store.docstore._dict.items():
             all_docs.append(doc)
-            if not hasattr(doc, 'metadata') or doc.metadata.get('source') != source:
+            
+            # If the document should be kept
+            should_keep = True
+            
+            # Check if it matches the source
+            if hasattr(doc, 'metadata') and doc.metadata.get('source') == source:
+                # If user_id is specified, only filter documents for that user
+                if user_id:
+                    if doc.metadata.get('user_id') == user_id:
+                        should_keep = False
+                else:
+                    # If no user_id specified, filter all documents with matching source
+                    should_keep = False
+            
+            if should_keep:
                 kept_docs.append(doc)
         
         removed_count = len(all_docs) - len(kept_docs)
-        print(f"Removing {removed_count} documents with source '{source}'")
+        user_info = f" for user {user_id}" if user_id else ""
+        print(f"Removing {removed_count} documents with source '{source}'{user_info}")
         
         if kept_docs:
             # If we have documents to keep, create a new vector store
@@ -106,7 +123,17 @@ def remove_documents_by_source(source: str):
         print("Vector store doesn't have the expected structure for document removal")
 
 
-def get_retriever(k_results=5):
+def get_retriever(k_results=5, user_id: Optional[str] = None):
+    """
+    Get a retriever for the vector store, optionally filtering by user_id.
+    
+    Args:
+        k_results: Number of results to retrieve
+        user_id: Optional user ID to filter documents by
+        
+    Returns:
+        A retriever configured to return k_results and filter by user_id if specified
+    """
     global vector_store
     if not vector_store:
         # Attempt to load if not initialized (e.g. server restart)
@@ -117,7 +144,24 @@ def get_retriever(k_results=5):
         else:
             print("Vector store not initialized and no index found. Upload files first.")
             return None # Or raise an error
-    return vector_store.as_retriever(search_kwargs={"k": k_results})
+    
+    # If user_id is specified, use a metadata filter
+    search_kwargs = {"k": k_results}
+    
+    # Create a retriever that filters by user_id if specified
+    if user_id:
+        def filter_by_user_id(doc):
+            return doc.metadata.get('user_id') == user_id
+        
+        retriever = vector_store.as_retriever(
+            search_kwargs=search_kwargs,
+            search_type="similarity",
+            filter=filter_by_user_id
+        )
+        return retriever
+    
+    # Otherwise return a standard retriever without filtering
+    return vector_store.as_retriever(search_kwargs=search_kwargs)
 
 # Call initialize_vector_store() on app startup if index exists
 # This can be done in main.py: app.on_event("startup")

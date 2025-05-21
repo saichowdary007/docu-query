@@ -7,58 +7,78 @@ from app.services.file_parser import get_documents_from_file, parse_excel, parse
 from app.services.vector_store import add_documents_to_store, initialize_vector_store, remove_documents_by_source
 from app.services.data_handler import dataframe_to_excel_bytes, dataframe_to_csv_bytes, load_structured_file, STRUCTURED_DATA_CACHE, execute_filtered_query
 from app.core.config import settings
-from app.core.security import get_api_key
+from app.core.security import get_api_key, get_current_user
 from app.models.pydantic_models import FileProcessRequest
+from app.models.user import TokenPayload
 
 router = APIRouter()
 
 # Ensure temp_uploads directory exists
 os.makedirs(settings.TEMP_UPLOAD_FOLDER, exist_ok=True)
 
-# Track uploaded structured files (filename: type)
+# Track uploaded structured files (user_id -> {filename: type})
 # This could be stored more persistently if needed (e.g. Redis, DB)
 UPLOADED_STRUCTURED_FILES = {}
 
-# Track all uploaded files, including non-structured ones
+# Track all uploaded files, including non-structured ones (user_id -> {filename: info})
 UPLOADED_FILES = {}
 
-def process_single_file_sync(file_path: str, filename: str):
+def get_user_upload_dir(user_id: str) -> str:
+    """Get a user-specific upload directory."""
+    user_dir = os.path.join(settings.TEMP_UPLOAD_FOLDER, user_id)
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
+
+def process_single_file_sync(file_path: str, filename: str, user_id: str):
     """Synchronous processing for a single file."""
-    print(f"Processing {filename}...")
+    print(f"Processing {filename} for user {user_id}...")
     try:
         documents = get_documents_from_file(file_path, filename)
         if documents:
+            # Tag documents with user_id for vector store
+            for doc in documents:
+                doc.metadata['user_id'] = user_id
+                
             add_documents_to_store(documents)
-            print(f"Successfully processed and added {filename} to vector store.")
+            print(f"Successfully processed and added {filename} to vector store for user {user_id}.")
             
-            # Track the file in our global list
+            # Track the file in user's file list
             _, ext = os.path.splitext(filename.lower())
             file_type = ext[1:] if ext else "unknown"
-            UPLOADED_FILES[filename] = {"type": file_type, "path": file_path}
             
-            # If it's a structured file, add to our tracker and cache it
+            # Initialize user's dictionaries if they don't exist
+            if user_id not in UPLOADED_FILES:
+                UPLOADED_FILES[user_id] = {}
+            if user_id not in UPLOADED_STRUCTURED_FILES:
+                UPLOADED_STRUCTURED_FILES[user_id] = {}
+                
+            UPLOADED_FILES[user_id][filename] = {"type": file_type, "path": file_path}
+            
+            # If it's a structured file, add to user's structured files tracker and cache it
             if ext in ['.csv', '.xls', '.xlsx']:
-                data = load_structured_file(filename) # This also caches it
+                data = load_structured_file(filename, user_id=user_id) # This also caches it
                 if data is not None:
-                    UPLOADED_STRUCTURED_FILES[filename] = "excel" if ext in ['.xls', '.xlsx'] else "csv"
-                    print(f"Cached structured file: {filename}")
+                    UPLOADED_STRUCTURED_FILES[user_id][filename] = "excel" if ext in ['.xls', '.xlsx'] else "csv"
+                    print(f"Cached structured file: {filename} for user {user_id}")
                 else:
-                    print(f"Warning: Could not load/cache structured file: {filename} after processing.")
+                    print(f"Warning: Could not load/cache structured file: {filename} for user {user_id} after processing.")
 
         else:
-            print(f"No documents extracted from {filename}. It might be empty or an unsupported type not yielding text.")
+            print(f"No documents extracted from {filename} for user {user_id}. It might be empty or an unsupported type not yielding text.")
     except ValueError as e: # Catch unsupported file type error from parser
-        print(f"Skipping {filename}: {e}")
+        print(f"Skipping {filename} for user {user_id}: {e}")
     except Exception as e:
-        print(f"Error processing {filename}: {e}")
+        print(f"Error processing {filename} for user {user_id}: {e}")
     # Do not delete from temp_uploads immediately if it's a structured file needed for data_handler
     # Deletion strategy needs care: maybe delete non-structured, or on session end, or LRU cache for structured.
     # For now, keep them in temp_uploads.
 
-@router.post("/upload/", dependencies=[Depends(get_api_key)])
+@router.post("/upload/")
 async def upload_files(
     background_tasks: BackgroundTasks,
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    api_key: str = Depends(get_api_key),
+    current_user: TokenPayload = Depends(get_current_user)
 ):
     """
     Uploads multiple files. Files are processed in the background.
@@ -68,7 +88,10 @@ async def upload_files(
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files sent.")
-
+        
+    user_id = current_user.sub
+    user_upload_dir = get_user_upload_dir(user_id)
+    
     processed_files = []
     errors = []
 
@@ -79,7 +102,7 @@ async def upload_files(
         if not sanitized_filename: # handle cases where filename becomes empty
             sanitized_filename = f"uploaded_file_{hash(original_filename)}" 
 
-        file_path = os.path.join(settings.TEMP_UPLOAD_FOLDER, sanitized_filename)
+        file_path = os.path.join(user_upload_dir, sanitized_filename)
         
         try:
             with open(file_path, "wb") as buffer:
@@ -91,8 +114,8 @@ async def upload_files(
             # For potentially long processing, Celery is better.
             # Let's use a simple synchronous call for this example,
             # but acknowledge BackgroundTasks for production.
-            # background_tasks.add_task(process_single_file_sync, file_path, sanitized_filename)
-            process_single_file_sync(file_path, sanitized_filename) # Call directly for now
+            # background_tasks.add_task(process_single_file_sync, file_path, sanitized_filename, user_id)
+            process_single_file_sync(file_path, sanitized_filename, user_id) # Call directly for now
             
             processed_files.append(sanitized_filename)
         except Exception as e:
@@ -107,29 +130,40 @@ async def upload_files(
         return {"message": "Files processed with some errors.", "processed": processed_files, "errors": errors}
     return {"message": "Files uploaded and processing started.", "processed_files": processed_files}
 
-@router.delete("/delete/{filename}", dependencies=[Depends(get_api_key)])
-async def delete_file(filename: str):
+@router.delete("/delete/{filename}")
+async def delete_file(
+    filename: str,
+    api_key: str = Depends(get_api_key),
+    current_user: TokenPayload = Depends(get_current_user)
+):
     """
     Delete a file from the system and remove its documents from the vector store.
     """
-    if filename not in UPLOADED_FILES:
-        raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+    user_id = current_user.sub
     
-    file_path = os.path.join(settings.TEMP_UPLOAD_FOLDER, filename)
+    # Initialize user's dictionary if it doesn't exist
+    if user_id not in UPLOADED_FILES:
+        UPLOADED_FILES[user_id] = {}
+        
+    if filename not in UPLOADED_FILES.get(user_id, {}):
+        raise HTTPException(status_code=404, detail=f"File '{filename}' not found for current user.")
+    
+    file_path = os.path.join(get_user_upload_dir(user_id), filename)
     
     try:
-        # Remove from vector store
+        # Remove from vector store (will need to be updated to filter by user_id too)
+        # For now, this might delete all documents from this file for all users
         remove_documents_by_source(filename)
         
         # Remove from structured files tracking if it's there
-        if filename in UPLOADED_STRUCTURED_FILES:
-            del UPLOADED_STRUCTURED_FILES[filename]
-            # Also remove from cache if present
+        if user_id in UPLOADED_STRUCTURED_FILES and filename in UPLOADED_STRUCTURED_FILES[user_id]:
+            del UPLOADED_STRUCTURED_FILES[user_id][filename]
+            # Also remove from cache if present (needs to be updated to support user-specific caching)
             if filename in STRUCTURED_DATA_CACHE:
                 del STRUCTURED_DATA_CACHE[filename]
         
         # Remove from our tracking
-        del UPLOADED_FILES[filename]
+        del UPLOADED_FILES[user_id][filename]
         
         # Delete the actual file
         if os.path.exists(file_path):
@@ -139,34 +173,48 @@ async def delete_file(filename: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
 
-@router.get("/uploaded-files", dependencies=[Depends(get_api_key)])
-async def get_all_uploaded_files():
-    """Lists all files known to the system."""
-    # Load files currently in the temp directory if not in our tracker
+@router.get("/uploaded-files")
+async def get_all_uploaded_files(
+    api_key: str = Depends(get_api_key),
+    current_user: TokenPayload = Depends(get_current_user)
+):
+    """Lists all files known to the system for the current user."""
+    user_id = current_user.sub
+    user_upload_dir = get_user_upload_dir(user_id)
+    
+    # Initialize user's dictionaries if they don't exist
+    if user_id not in UPLOADED_FILES:
+        UPLOADED_FILES[user_id] = {}
+    if user_id not in UPLOADED_STRUCTURED_FILES:
+        UPLOADED_STRUCTURED_FILES[user_id] = {}
+    
+    # Load files currently in the user's directory if not in our tracker
     # This ensures we find files even after server restart
-    temp_files = os.listdir(settings.TEMP_UPLOAD_FOLDER)
-    
-    # Add files that exist but aren't tracked
-    for filename in temp_files:
-        if filename not in UPLOADED_FILES and os.path.isfile(os.path.join(settings.TEMP_UPLOAD_FOLDER, filename)):
-            file_path = os.path.join(settings.TEMP_UPLOAD_FOLDER, filename)
-            _, ext = os.path.splitext(filename.lower())
-            file_type = ext[1:] if ext else "unknown"
-            UPLOADED_FILES[filename] = {"type": file_type, "path": file_path}
-    
-    # Remove files that no longer exist
-    for filename in list(UPLOADED_FILES.keys()):
-        if filename not in temp_files:
-            del UPLOADED_FILES[filename]
+    if os.path.exists(user_upload_dir):
+        temp_files = os.listdir(user_upload_dir)
+        
+        # Add files that exist but aren't tracked
+        for filename in temp_files:
+            file_path = os.path.join(user_upload_dir, filename)
+            if filename not in UPLOADED_FILES[user_id] and os.path.isfile(file_path):
+                _, ext = os.path.splitext(filename.lower())
+                file_type = ext[1:] if ext else "unknown"
+                UPLOADED_FILES[user_id][filename] = {"type": file_type, "path": file_path}
+        
+        # Remove files that no longer exist
+        for filename in list(UPLOADED_FILES[user_id].keys()):
+            file_path = os.path.join(user_upload_dir, filename)
+            if not os.path.exists(file_path):
+                del UPLOADED_FILES[user_id][filename]
     
     return {
         "files": [
             {
                 "filename": filename,
                 "type": info["type"],
-                "is_structured": filename in UPLOADED_STRUCTURED_FILES
+                "is_structured": user_id in UPLOADED_STRUCTURED_FILES and filename in UPLOADED_STRUCTURED_FILES[user_id]
             }
-            for filename, info in UPLOADED_FILES.items()
+            for filename, info in UPLOADED_FILES.get(user_id, {}).items()
         ]
     }
 
