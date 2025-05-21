@@ -10,6 +10,7 @@ import {
 import { motion } from 'framer-motion'
 import { apiUrls, getApiKey } from '../lib/api'
 import { fetchWithAuth } from '../lib/fetch-with-auth'
+import { useAuth } from '../lib/auth-context'
 
 interface FileInfo {
   filename: string
@@ -26,8 +27,14 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
   const [files, setFiles] = useState<FileInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { isAuthenticated } = useAuth()
 
   const fetchFiles = async () => {
+    if (!isAuthenticated) {
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     try {
@@ -54,12 +61,20 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
   }
 
   useEffect(() => {
-    fetchFiles()
-
-    // Set up polling to refresh file list every 30 seconds
-    const interval = setInterval(fetchFiles, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    // Only attempt to fetch files when authenticated
+    if (isAuthenticated) {
+      fetchFiles()
+      
+      // Set up polling only when authenticated
+      const interval = setInterval(fetchFiles, 30000)
+      return () => clearInterval(interval)
+    } else {
+      // Reset state when not authenticated
+      setFiles([])
+      setIsLoading(false)
+      setError(null)
+    }
+  }, [isAuthenticated]) // Add dependency on authentication status
 
   const toggleFileSelection = (filename: string) => {
     if (activeFiles.includes(filename)) {
@@ -120,6 +135,18 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
       console.error('Error deleting file:', err)
       alert('Failed to delete file')
     }
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="py-4 text-center text-gray-500 dark:text-gray-400">
+        <p>Please log in to view your files</p>
+        <a href="/login" className="text-blue-500 hover:underline mt-2 inline-block">
+          Go to login page
+        </a>
+      </div>
+    )
   }
 
   if (isLoading && files.length === 0) {

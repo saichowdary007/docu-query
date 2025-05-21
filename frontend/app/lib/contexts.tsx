@@ -3,6 +3,8 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect, useRef } from 'react'
 import { apiUrls, getApiKey } from './api'
 import { debugLog, logFileSelection } from './debug'
+import { useAuth } from './auth-context'
+import { fetchWithAuth } from './fetch-with-auth'
 
 export interface StoredFile {
   filename: string
@@ -29,12 +31,21 @@ export function FileProvider({ children }: { children: ReactNode }) {
   const initialLoadComplete = useRef<boolean>(false)
   // Keep track of all files to ensure proper selection is maintained
   const previousFiles = useRef<StoredFile[]>([]);
+  const { isAuthenticated } = useAuth()
 
   const fetchFiles = async () => {
+    // Don't try to fetch files if not authenticated
+    if (!isAuthenticated) {
+      setFiles([])
+      setActiveFile(null)
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     try {
       const apiKey = getApiKey()
-      const response = await fetch(apiUrls.filesList, {
+      const response = await fetchWithAuth(apiUrls.filesList, {
         method: 'GET',
         headers: {
           'X-API-KEY': apiKey,
@@ -127,9 +138,11 @@ export function FileProvider({ children }: { children: ReactNode }) {
   }
 
   const deleteFile = async (filename: string): Promise<boolean> => {
+    if (!isAuthenticated) return false;
+    
     try {
       const apiKey = getApiKey()
-      const response = await fetch(apiUrls.fileDelete(filename), {
+      const response = await fetchWithAuth(apiUrls.fileDelete(filename), {
         method: 'DELETE',
         headers: {
           'X-API-KEY': apiKey,
@@ -165,13 +178,21 @@ export function FileProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // Don't set up polling if not authenticated
+    if (!isAuthenticated) {
+      setFiles([])
+      setActiveFile(null)
+      setIsLoading(false)
+      return () => {}
+    }
+    
     // Initial fetch
     fetchFiles()
     
     // Set up polling for refreshing files list
     const interval = setInterval(fetchFiles, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, [isAuthenticated]) // Re-run effect when authentication state changes
 
   return (
     <FileContext.Provider value={{ 

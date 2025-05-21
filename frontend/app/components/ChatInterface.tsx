@@ -7,6 +7,8 @@ import { motion } from 'framer-motion'
 import { BorderBeam } from './ui/border-beam'
 import { apiUrls, getApiKey } from '../lib/api'
 import { useFiles } from '../lib/contexts'
+import { useAuth } from '../lib/auth-context'
+import { fetchWithAuth } from '../lib/fetch-with-auth'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -46,6 +48,7 @@ export default function ChatInterface() {
   const [parent] = useAutoAnimate()
   const { activeFile, files } = useFiles()
   const prevActiveFileRef = useRef<string | null>(null)
+  const { isAuthenticated } = useAuth()
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -90,6 +93,21 @@ export default function ChatInterface() {
     e.preventDefault()
     if (!input.trim() || isLoading) return
     
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      setMessages(prev => [...prev, {
+        role: 'user',
+        content: input.trim(),
+        timestamp: Date.now()
+      }, {
+        role: 'assistant',
+        content: 'Please log in to use the chat functionality.',
+        timestamp: Date.now()
+      }])
+      setInput('')
+      return
+    }
+    
     // Check if a file is selected
     if (!activeFile) {
       setMessages(prev => [...prev, {
@@ -118,7 +136,7 @@ export default function ChatInterface() {
     try {
       const apiKey = getApiKey()
       
-      const response = await fetch(apiUrls.chat, {
+      const response = await fetchWithAuth(apiUrls.chat, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,6 +186,11 @@ export default function ChatInterface() {
 
   const handleDownload = async (message: Message) => {
     if (!message.download_available || !message.download_filename) return
+    
+    if (!isAuthenticated) {
+      alert('Please log in to download files')
+      return
+    }
 
     try {
       const apiKey = getApiKey()
@@ -189,7 +212,7 @@ export default function ChatInterface() {
       // Log the actual request data
       console.log("Sending download request:", requestBody);
       
-      const response = await fetch(apiUrls.fileDownload, {
+      const response = await fetchWithAuth(apiUrls.fileDownload, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

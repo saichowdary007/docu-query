@@ -7,6 +7,8 @@ import { motion } from 'framer-motion'
 import { BorderBeam } from './ui/border-beam'
 import { apiUrls, getApiKey } from '../lib/api'
 import { useFiles } from '../lib/contexts'
+import { useAuth } from '../lib/auth-context'
+import { fetchWithAuth } from '../lib/fetch-with-auth'
 
 interface UploadedFile {
   name: string
@@ -30,6 +32,7 @@ export default function FileUploader({ onFileUploaded }: FileUploaderProps = {})
   const [isUploading, setIsUploading] = useState(false)
   const [deletingFiles, setDeletingFiles] = useState<string[]>([])
   const { files, activeFile, setActiveFile, fetchFiles, deleteFile } = useFiles()
+  const { isAuthenticated } = useAuth()
 
   const clearSuccessfulUploads = () => {
     setUploadedFiles(prev => prev.filter(file => file.status !== 'success'))
@@ -78,7 +81,7 @@ export default function FileUploader({ onFileUploaded }: FileUploaderProps = {})
   }
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (isUploading) return
+    if (isUploading || !isAuthenticated) return
 
     setIsUploading(true)
     const newFiles = acceptedFiles.map(file => ({
@@ -100,7 +103,7 @@ export default function FileUploader({ onFileUploaded }: FileUploaderProps = {})
     const apiKey = getApiKey()
 
     try {
-      const response = await fetch(apiUrls.fileUpload, {
+      const response = await fetchWithAuth(apiUrls.fileUpload, {
         method: 'POST',
         headers: {
           'X-API-KEY': apiKey,
@@ -154,7 +157,7 @@ export default function FileUploader({ onFileUploaded }: FileUploaderProps = {})
     } finally {
       setIsUploading(false)
     }
-  }, [isUploading, fetchFiles, onFileUploaded])
+  }, [isUploading, fetchFiles, onFileUploaded, isAuthenticated])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -204,6 +207,40 @@ export default function FileUploader({ onFileUploaded }: FileUploaderProps = {})
       default:
         return <DocumentIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
     }
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="relative bg-white dark:bg-gray-950 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 h-full flex flex-col transition-colors duration-200 w-full overflow-hidden"
+      >
+        <BorderBeam
+          size={80}
+          duration={10}
+          colorFrom="#34D399" 
+          colorTo="#3B82F6"
+        />
+        
+        <div className="p-4">
+          <h2 className="text-lg font-medium text-gray-800 dark:text-gray-100 flex items-center">
+            <CloudArrowUpIcon className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
+            Document Manager
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Please log in to upload and manage documents
+          </p>
+          <div className="mt-4 p-5 text-center">
+            <a href="/login" className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors">
+              Login to continue
+            </a>
+          </div>
+        </div>
+      </motion.div>
+    )
   }
 
   return (
