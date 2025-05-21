@@ -6,60 +6,61 @@ from app.core.config import settings
 import numpy as np
 
 # Simple cache for loaded dataframes to avoid re-reading constantly
-# Key: f"{user_id}:{filename}", Value: pd.DataFrame or Dict[str, pd.DataFrame] for Excel
+# Key: filename, Value: pd.DataFrame or Dict[str, pd.DataFrame] for Excel
 # This should ideally be more robust (e.g., Redis, or manage lifetimes)
 STRUCTURED_DATA_CACHE: Dict[str, Any] = {}
 
-def get_cache_key(filename: str, user_id: str = None) -> str:
-    """Generate a cache key that's unique per user if user_id is provided."""
-    if user_id:
-        return f"{user_id}:{filename}"
-    return filename
-
-def load_structured_file(filename: str, user_id: str = None) -> Union[pd.DataFrame, Dict[str, pd.DataFrame], None]:
+def load_structured_file(file_path: str, filename: str = None) -> Union[pd.DataFrame, Dict[str, pd.DataFrame], None]:
     """
-    Load a structured file from disk, with support for user-specific storage.
+    Load a structured file from path or by filename.
     
     Args:
-        filename: Name of the file to load
-        user_id: Optional user ID for user-specific file storage
-        
-    Returns:
-        DataFrame or dict of DataFrames for Excel with multiple sheets
-    """
-    # Generate cache key based on user_id if provided
-    cache_key = get_cache_key(filename, user_id)
+        file_path: Full path to the file, or just the filename (for backward compatibility)
+        filename: Optional filename for cache keys (if None, uses file_path basename)
     
-    if cache_key in STRUCTURED_DATA_CACHE:
-        return STRUCTURED_DATA_CACHE[cache_key]
-
-    # Determine file path based on whether user_id is provided
-    if user_id:
-        user_dir = os.path.join(settings.TEMP_UPLOAD_FOLDER, user_id)
-        file_path = os.path.join(user_dir, filename)
-    else:
-        file_path = os.path.join(settings.TEMP_UPLOAD_FOLDER, filename)
-        
+    Returns:
+        DataFrame or Dict of DataFrames for Excel files with multiple sheets
+    """
+    # For backward compatibility
+    if not filename:
+        filename = os.path.basename(file_path)
+    
+    # Check cache first
+    if filename in STRUCTURED_DATA_CACHE:
+        return STRUCTURED_DATA_CACHE[filename]
+    
+    # If file_path is just a filename (legacy), construct the full path
+    if not os.path.exists(file_path) and not os.path.isabs(file_path):
+        file_path = os.path.join(settings.TEMP_UPLOAD_FOLDER, file_path)
+    
     if not os.path.exists(file_path):
         # This indicates a potential issue: file summary in vector DB, but original gone.
-        # For a robust system, uploaded files (especially structured ones) should persist reliably.
-        print(f"Warning: Original file {filename}{' for user '+user_id if user_id else ''} not found for direct querying.")
+        print(f"Warning: File {filename} not found at {file_path} for direct querying.")
         return None
 
     _, ext = os.path.splitext(filename.lower())
     data = None
-    if ext == ".csv":
-        data = pd.read_csv(file_path)
-    elif ext in [".xls", ".xlsx"]:
-        data = pd.read_excel(file_path, sheet_name=None) # Load all sheets
+    try:
+        if ext == ".csv":
+            data = pd.read_csv(file_path)
+        elif ext in [".xls", ".xlsx"]:
+            data = pd.read_excel(file_path, sheet_name=None) # Load all sheets
+    except Exception as e:
+        print(f"Error loading file {filename}: {str(e)}")
+        return None
 
     if data is not None:
-        STRUCTURED_DATA_CACHE[cache_key] = data
+        STRUCTURED_DATA_CACHE[filename] = data
     return data
 
 
-def get_interactive_list(filename: str, column_name: str, sheet_name: str = None, user_id: str = None) -> List[Any]:
-    data = load_structured_file(filename, user_id)
+def get_interactive_list(filename: str, column_name: str, sheet_name: str = None) -> List[Any]:
+    """Get a list of unique values in a column for interactive filtering."""
+    # Get the file path in the user's directory
+    file_path = os.path.join(settings.TEMP_UPLOAD_FOLDER, filename)  # Default location
+    
+    # Try to load from this path first
+    data = load_structured_file(file_path, filename)
     if data is None:
         return ["Error: File not found or not loaded."]
 
@@ -74,7 +75,6 @@ def get_interactive_list(filename: str, column_name: str, sheet_name: str = None
         else:
             return [f"Error: Excel file '{filename}' has multiple sheets. Please specify one from: {list(data.keys())}"]
 
-
     if df_to_query is None:
         return [f"Error: Sheet '{sheet_name}' not found in '{filename}' or data not loaded."]
     
@@ -84,7 +84,7 @@ def get_interactive_list(filename: str, column_name: str, sheet_name: str = None
     return df_to_query[column_name].unique().tolist()
 
 
-def count_matching_rows(filename: str, column: str, value: Any, sheet_name: str = None, user_id: str = None) -> int:
+def count_matching_rows(filename: str, column: str, value: Any, sheet_name: str = None) -> int:
     """
     Count rows in a DataFrame that match a specific value in a column.
     This is useful for queries like "how many males" or "number of department X".
@@ -94,12 +94,11 @@ def count_matching_rows(filename: str, column: str, value: Any, sheet_name: str 
         column: The column to filter on
         value: The value to match
         sheet_name: Sheet name for Excel files (optional)
-        user_id: Optional user ID for user-specific file storage
         
     Returns:
         int: Count of matching rows
     """
-    data = load_structured_file(filename, user_id)
+    data = load_structured_file(filename)
     if data is None:
         raise ValueError(f"File {filename} not found or could not be loaded")
         
@@ -143,9 +142,18 @@ def count_matching_rows(filename: str, column: str, value: Any, sheet_name: str 
 
 
 def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = None, drop_duplicates: bool = False, 
-                           subset: Optional[List[str]] = None, user_id: str = None) -> pd.DataFrame:
+                         subset: Optional[List[str]] = None, source_filename: str = None) -> pd.DataFrame:
     """
     Executes a filtered query based on parameters.
+    
+    Args:
+        filename: Full path to the file or just the filename (legacy)
+        query_params: Dict or List of Dicts with filtering conditions
+        sheet_name: Optional sheet name for Excel files
+        drop_duplicates: Whether to drop duplicate rows
+        subset: Optional list of columns to consider when dropping duplicates
+        source_filename: Optional original filename for cache keys
+    
     query_params example: {"column": "Salary", "operator": ">", "value": 50000}
                          {"column": "Department", "operator": "==", "value": "HR"}
     Or for multiple conditions:
@@ -158,15 +166,18 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
     - If query_params is an empty list [], returns all records without filtering
     """
     print(f"execute_filtered_query called with: filename={filename}, query_params={query_params}, " 
-          f"sheet_name={sheet_name}, drop_duplicates={drop_duplicates}, subset={subset}, user_id={user_id}")
+          f"sheet_name={sheet_name}, drop_duplicates={drop_duplicates}, subset={subset}")
     
-    data = load_structured_file(filename, user_id)
+    # If source_filename is provided, use it for cache key, otherwise extract from path
+    cache_key = source_filename if source_filename else os.path.basename(filename)
+    
+    data = load_structured_file(filename, cache_key)
     if data is None:
         print(f"Error: File {filename} not found or could not be loaded")
         raise ValueError("File not found or not loaded for querying.")
 
     # Determine if this is a CSV file
-    _, ext = os.path.splitext(filename.lower())
+    _, ext = os.path.splitext(cache_key.lower())
     is_csv = ext == ".csv"
     
     # Get the dataframe to query
@@ -177,12 +188,12 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
     elif isinstance(data, dict) and not sheet_name and len(data) == 1: # Excel with single sheet
         df_to_query = next(iter(data.values())).copy()
     elif isinstance(data, dict) and not sheet_name and len(data) > 1: # Excel with multiple sheets
-        raise ValueError(f"Excel file '{filename}' has multiple sheets. Query must specify a sheet.")
+        raise ValueError(f"Excel file '{cache_key}' has multiple sheets. Query must specify a sheet.")
     else:
-        raise ValueError(f"Could not process data from '{filename}'.")
+        raise ValueError(f"Could not process data from '{cache_key}'.")
     
     if df_to_query is None:
-        raise ValueError(f"Sheet '{sheet_name}' not found in '{filename}' or data structure issue.")
+        raise ValueError(f"Sheet '{sheet_name}' not found in '{cache_key}' or data structure issue.")
     
     # Handle specific cases - pre-process common columns for CSV files
     if is_csv:
@@ -200,7 +211,7 @@ def execute_filtered_query(filename: str, query_params: Dict, sheet_name: str = 
             col = query_params.get("column")
             val = query_params.get("value")
             try:
-                count = count_matching_rows(filename, col, val, sheet_name, user_id)
+                count = count_matching_rows(filename, col, val, sheet_name)
                 # Create a simple DataFrame with the count to return
                 return pd.DataFrame({"Count": [count]})
             except Exception as e:

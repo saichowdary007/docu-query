@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text, Enum as SQLAlchemyEnum
+from sqlalchemy import Column, String, Boolean, DateTime, Text, Enum as SQLAlchemyEnum, ForeignKey
 from sqlalchemy.sql import func
 import uuid
 from app.core.database import Base
@@ -27,3 +27,18 @@ class User(Base):
     
     # Optional refresh token storage
     refresh_token = Column(Text, nullable=True) 
+
+
+class File(Base):
+    """Database model for files uploaded by users."""
+    __tablename__ = "files"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    filename = Column(String, nullable=False, index=True)
+    file_path = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    is_structured = Column(Boolean, default=False)
+    structure_type = Column(String, nullable=True)  # e.g., "excel", "csv"
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now()) 

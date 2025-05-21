@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Union, Any
 import os
 from app.core.config import settings
-from app.models.user import TokenPayload
+from app.models.user import TokenPayload, UserRole
 
 # For API Key Authentication
 API_KEY_NAME = "X-API-KEY"
@@ -111,3 +111,16 @@ async def get_optional_current_user(token: str = Depends(oauth2_scheme)):
         return token_data
     except JWTError:
         return None
+
+
+async def get_current_admin_user(current_user: TokenPayload = Depends(get_current_user)):
+    """
+    Validate that the current user has admin role.
+    This function should be used as a dependency for admin-only endpoints.
+    """
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized. Admin privileges required."
+        )
+    return current_user

@@ -25,6 +25,15 @@ class UserLogin(BaseModel):
     password: str
 
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+    profile_picture: Optional[str] = None
+    role: Optional[UserRole] = None
+    admin_action: Optional[bool] = False
+
+
 class GoogleAuthRequest(BaseModel):
     token: str
 
