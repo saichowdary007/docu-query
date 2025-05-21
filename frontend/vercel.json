@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://docuquery-ai-backend.onrender.com/api/:path*"
+      "destination": "https://docuquery-ai.onrender.com/api/:path*"
     }
   ],
   "headers": [
@@ -36,6 +36,6 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_BACKEND_URL": "https://docuquery-ai-backend.onrender.com"
+    "NEXT_PUBLIC_BACKEND_URL": "https://docuquery-ai.onrender.com"
   }
 } 
