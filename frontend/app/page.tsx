@@ -5,6 +5,7 @@ import ChatInterface from './components/ChatInterface'
 import AppLayout from './components/AppLayout'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline'
+import { apiUrls, getApiKey } from './lib/api'
 
 // RetroGrid component - simplified version from Magic UI
 interface RetroGridProps {
@@ -72,8 +73,8 @@ export default function Home() {
     
     const fetchFileCount = async () => {
       try {
-        const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-        const response = await fetch('http://localhost:8000/api/v1/files/uploaded-files', {
+        const apiKey = getApiKey()
+        const response = await fetch(apiUrls.filesList, {
           method: 'GET',
           headers: {
             'X-API-KEY': apiKey,

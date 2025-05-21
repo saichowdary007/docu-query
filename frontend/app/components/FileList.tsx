@@ -8,6 +8,7 @@ import {
   TrashIcon
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import { apiUrls, getApiKey } from '../lib/api'
 
 interface FileInfo {
   filename: string
@@ -29,8 +30,8 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
     setIsLoading(true)
     setError(null)
     try {
-      const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-      const response = await fetch('http://localhost:8000/api/v1/files/uploaded-files', {
+      const apiKey = getApiKey()
+      const response = await fetch(apiUrls.filesList, {
         method: 'GET',
         headers: {
           'X-API-KEY': apiKey,
@@ -95,8 +96,8 @@ export default function FileList({ activeFiles, setActiveFiles }: FileListProps)
     if (!confirm(`Are you sure you want to delete ${filename}?`)) return
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'secret_api_key_123'
-      const response = await fetch(`http://localhost:8000/api/v1/files/delete/${filename}`, {
+      const apiKey = getApiKey()
+      const response = await fetch(apiUrls.fileDelete(filename), {
         method: 'DELETE',
         headers: {
           'X-API-KEY': apiKey,
