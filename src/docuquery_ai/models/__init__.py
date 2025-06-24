@@ -1,12 +1,12 @@
 """Data models for DocuQuery AI."""
 
-from .db_models import User, File
+from .db_models import File, User
 from .pydantic_models import (
+    FileProcessRequest,
     QueryRequest,
     QueryResponse,
-    FileProcessRequest,
 )
-from .user import UserRole, TokenPayload, UserCreate, UserResponse
+from .user import TokenPayload, UserCreate, UserResponse, UserRole
 
 __all__ = [
     "User",

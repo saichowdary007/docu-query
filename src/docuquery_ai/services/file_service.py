@@ -1,11 +1,12 @@
-from sqlalchemy.orm import Session
-from typing import List, Dict, Optional, Any
 import os
 import shutil
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from docuquery_ai.models.db_models import File, User
+from sqlalchemy.orm import Session
+
 from docuquery_ai.core.config import settings
+from docuquery_ai.models.db_models import File, User
 
 
 def create_file_record(

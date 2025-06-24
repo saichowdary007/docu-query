@@ -1,9 +1,11 @@
+import os
+from typing import List
+
 from langchain_community.vectorstores import FAISS  # or Chroma
 from langchain_core.documents import Document
-from typing import List
-from docuquery_ai.services.nlp_service import get_embeddings_model
+
 from docuquery_ai.core.config import settings
-import os
+from docuquery_ai.services.nlp_service import get_embeddings_model
 
 # Ensure vector_db_data directory exists
 os.makedirs(settings.VECTOR_STORE_PATH, exist_ok=True)

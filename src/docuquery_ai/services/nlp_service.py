@@ -1,14 +1,16 @@
-import requests
 import json
-from typing import Dict, Any, List, Optional
-from langchain_google_vertexai import VertexAIEmbeddings
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.embeddings import Embeddings
+from typing import Any, Dict, List, Optional
+
 import numpy as np
-from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
-from langchain_core.outputs import ChatGeneration
+import requests
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-from pydantic import Field, BaseModel
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatGeneration
+from langchain_google_vertexai import VertexAIEmbeddings
+from pydantic import BaseModel, Field
+
 from docuquery_ai.core.config import settings
 
 

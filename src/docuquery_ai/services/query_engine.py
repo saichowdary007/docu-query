@@ -1,20 +1,22 @@
+import json
+import os
+from copy import deepcopy
+
+import pandas as pd
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from sqlalchemy.orm import Session
+
+from docuquery_ai.models.db_models import File
+from docuquery_ai.models.pydantic_models import QueryRequest, QueryResponse
+from docuquery_ai.services.data_handler import (
+    count_matching_rows,
+    execute_filtered_query,
+    get_interactive_list,
+    load_structured_file,
+)
 from docuquery_ai.services.nlp_service import get_llm
 from docuquery_ai.services.vector_store import get_retriever
-from docuquery_ai.services.data_handler import (
-    get_interactive_list,
-    execute_filtered_query,
-    load_structured_file,
-    count_matching_rows,
-)
-from docuquery_ai.models.pydantic_models import QueryRequest, QueryResponse
-from docuquery_ai.models.db_models import File
-import json
-import os
-import pandas as pd
-from copy import deepcopy
 
 # This is a crucial part: Intent recognition and dispatching
 # For a production system, this would be more sophisticated, possibly using

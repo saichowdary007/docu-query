@@ -1,11 +1,12 @@
-import os
-from sqlalchemy.orm import Session
 import glob
+import os
 from typing import Dict, List, Optional
 
+from sqlalchemy.orm import Session
+
+from docuquery_ai.core.config import settings
 from docuquery_ai.core.database import SessionLocal
 from docuquery_ai.models.db_models import File, User
-from docuquery_ai.core.config import settings
 from docuquery_ai.services.file_service import create_file_record
 
 

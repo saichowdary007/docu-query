@@ -1,11 +1,12 @@
 import os
-from sqlalchemy.orm import Session
 import uuid
 
+from sqlalchemy.orm import Session
+
 from docuquery_ai.core.database import get_db
-from docuquery_ai.models.user import UserRole
-from docuquery_ai.models.db_models import User
 from docuquery_ai.core.security import get_password_hash
+from docuquery_ai.models.db_models import User
+from docuquery_ai.models.user import UserRole
 
 
 def seed_admin_user():

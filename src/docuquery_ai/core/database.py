@@ -1,7 +1,8 @@
-from sqlalchemy import create_engine, inspect, exc
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
 import sqlite3
+
+from sqlalchemy import create_engine, exc, inspect
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 from docuquery_ai.core.config import settings
 
 # Get database URL from centralized settings

@@ -2,12 +2,13 @@
 Command-line interface for DocuQuery AI.
 """
 
-import click
 import json
 import os
 import sys
 from pathlib import Path
 from typing import Optional
+
+import click
 
 from docuquery_ai import DocumentQueryClient, __version__
 

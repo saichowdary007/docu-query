@@ -1,13 +1,15 @@
 import csv
 import os
+from typing import Any, Dict, List
+
+import markdown
 import pandas as pd
 from docx import Document as DocxDocument
-from pptx import Presentation
-from pypdf import PdfReader
-import markdown
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing import List, Dict, Any
+from pptx import Presentation
+from pypdf import PdfReader
+
 from docuquery_ai.core.config import settings
 
 # Ensure temp_uploads directory exists

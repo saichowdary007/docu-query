@@ -1,9 +1,10 @@
-from fastapi import Security, HTTPException, status, Depends
-from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
-from jose import jwt, JWTError
-from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from typing import Optional, Union, Any
+from typing import Any, Optional, Union
+
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 from docuquery_ai.core.config import settings
 from docuquery_ai.models.user import TokenPayload, UserRole

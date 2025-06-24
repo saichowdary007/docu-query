@@ -4,20 +4,20 @@ Main client interface for DocuQuery AI package.
 
 import os
 import tempfile
-from typing import Optional, Dict, Any, List
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from .core.config import Settings
-from .core.database import init_db, SessionLocal, get_db
-from .services.file_service import create_file_record, get_file_by_filename, delete_file
+from .core.database import SessionLocal, get_db, init_db
+from .models.pydantic_models import QueryRequest, QueryResponse
 from .services.file_parser import get_documents_from_file
+from .services.file_service import create_file_record, delete_file, get_file_by_filename
+from .services.query_engine import process_query
 from .services.vector_store import (
-    initialize_vector_store,
     add_documents_to_store,
+    initialize_vector_store,
     remove_documents_by_source,
 )
-from .services.query_engine import process_query
-from .models.pydantic_models import QueryRequest, QueryResponse
 
 
 class DocumentQueryClient:

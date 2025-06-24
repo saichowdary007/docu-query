@@ -1,17 +1,18 @@
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
-from typing import Optional, List
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import List, Optional
 
-from docuquery_ai.models.db_models import User
-from docuquery_ai.models.user import UserCreate, UserResponse, UserRole, UserUpdate
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
 from docuquery_ai.core.security import (
-    get_password_hash,
-    verify_password,
     create_access_token,
     create_refresh_token,
+    get_password_hash,
+    verify_password,
 )
+from docuquery_ai.models.db_models import User
+from docuquery_ai.models.user import UserCreate, UserResponse, UserRole, UserUpdate
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:

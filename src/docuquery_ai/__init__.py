@@ -12,9 +12,9 @@ __email__ = "contact@docuquery-ai.com"
 from .client import DocumentQueryClient
 from .core.config import Settings
 from .models.pydantic_models import (
+    FileProcessRequest,
     QueryRequest,
     QueryResponse,
-    FileProcessRequest,
 )
 from .models.user import UserCreate, UserResponse
 
