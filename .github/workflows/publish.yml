@@ -2,12 +2,8 @@ name: Publish to PyPI
 
 on:
   push:
-    # test on every push to main
     branches:
       - main
-    # build & publish on semver tags like v1.2.3
-    tags:
-      - 'v*.*.*'
   pull_request:
     branches:
       - main
@@ -38,16 +34,13 @@ jobs:
           flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
 
       - name: Format check with black
-        run: |
-          black --check src/
+        run: black --check src/
 
       - name: Import order check with isort
-        run: |
-          isort --check-only src/
+        run: isort --check-only src/
 
       - name: Type check with mypy
-        run: |
-          mypy src/docuquery_ai/ --ignore-missing-imports
+        run: mypy src/docuquery_ai/ --ignore-missing-imports
         continue-on-error: true
 
       - name: Test package installation
@@ -56,19 +49,17 @@ jobs:
           python -c "import docuquery_ai; print(f'Successfully imported docuquery_ai v{docuquery_ai.__version__}')"
 
       - name: Test CLI installation
-        run: |
-          docuquery --help
+        run: docuquery --help
 
   build:
     needs: test
     runs-on: ubuntu-latest
-    # only build when we’ve pushed a tag
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
@@ -79,12 +70,10 @@ jobs:
           pip install build twine
 
       - name: Build package
-        run: |
-          python -m build
+        run: python -m build
 
       - name: Check distribution
-        run: |
-          twine check dist/*
+        run: twine check dist/*
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
@@ -95,11 +84,10 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    # only publish when we’ve pushed a tag
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: pypi
-      url: https://pypi.org/p/docuquery-ai
+      url: https://pypi.org/project/docuquery-ai/
     permissions:
       id-token: write
 
