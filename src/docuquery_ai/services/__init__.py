@@ -7,7 +7,7 @@ from .vector_store import initialize_vector_store, add_documents_to_store
 
 __all__ = [
     "create_file_record",
-    "get_documents_from_file", 
+    "get_documents_from_file",
     "process_query",
     "initialize_vector_store",
     "add_documents_to_store",

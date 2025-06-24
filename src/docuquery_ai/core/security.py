@@ -19,7 +19,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 # Setup OAuth2 password flow
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/login", auto_error=False
+)
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -35,13 +37,17 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(subject: Union[str, Any], role: str = "user", expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    subject: Union[str, Any],
+    role: str = "user",
+    expires_delta: Optional[timedelta] = None,
+) -> str:
     """Create a new access token."""
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode = {"exp": expire, "sub": str(subject), "role": role}
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -62,7 +68,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials"
+            detail="Could not validate credentials",
         )
 
 
@@ -74,11 +80,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     try:
-        payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         token_data = TokenPayload(**payload)
         if datetime.fromtimestamp(token_data.exp) < datetime.now():
             raise HTTPException(
@@ -92,7 +96,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     return token_data
 
 
@@ -100,11 +104,9 @@ async def get_optional_current_user(token: str = Depends(oauth2_scheme)):
     """Get current user but don't raise exception if no token provided."""
     if not token:
         return None
-    
+
     try:
-        payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         token_data = TokenPayload(**payload)
         if datetime.fromtimestamp(token_data.exp) < datetime.now():
             return None
@@ -113,7 +115,9 @@ async def get_optional_current_user(token: str = Depends(oauth2_scheme)):
         return None
 
 
-async def get_current_admin_user(current_user: TokenPayload = Depends(get_current_user)):
+async def get_current_admin_user(
+    current_user: TokenPayload = Depends(get_current_user),
+):
     """
     Validate that the current user has admin role.
     This function should be used as a dependency for admin-only endpoints.
@@ -121,6 +125,6 @@ async def get_current_admin_user(current_user: TokenPayload = Depends(get_curren
     if current_user.role != UserRole.ADMIN.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized. Admin privileges required."
+            detail="Not authorized. Admin privileges required.",
         )
     return current_user

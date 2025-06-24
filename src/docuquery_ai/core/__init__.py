@@ -6,11 +6,11 @@ from .security import get_password_hash, verify_password, create_access_token
 
 __all__ = [
     "Settings",
-    "settings", 
+    "settings",
     "init_db",
     "get_db",
     "SessionLocal",
     "get_password_hash",
-    "verify_password", 
+    "verify_password",
     "create_access_token",
-] 
+]

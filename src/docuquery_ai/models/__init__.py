@@ -10,7 +10,7 @@ from .user import UserRole, TokenPayload, UserCreate, UserResponse
 
 __all__ = [
     "User",
-    "File", 
+    "File",
     "QueryRequest",
     "QueryResponse",
     "FileProcessRequest",
@@ -18,4 +18,4 @@ __all__ = [
     "UserResponse",
     "UserRole",
     "TokenPayload",
-] 
+]

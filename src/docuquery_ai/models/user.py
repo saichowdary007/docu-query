@@ -41,7 +41,7 @@ class GoogleAuthRequest(BaseModel):
 class UserResponse(UserBase):
     id: str
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -55,4 +55,4 @@ class TokenData(BaseModel):
 class TokenPayload(BaseModel):
     sub: str
     exp: int
-    role: Optional[str] = None 
+    role: Optional[str] = None

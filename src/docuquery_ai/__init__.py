@@ -16,17 +16,14 @@ from .models.pydantic_models import (
     QueryResponse,
     FileProcessRequest,
 )
-from .models.user import (
-    UserCreate,
-    UserResponse
-)
+from .models.user import UserCreate, UserResponse
 
 __all__ = [
     "DocumentQueryClient",
-    "Settings", 
+    "Settings",
     "QueryRequest",
     "QueryResponse",
     "FileProcessRequest",
     "UserCreate",
     "UserResponse",
-] 
+]

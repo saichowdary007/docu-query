@@ -3,7 +3,12 @@ from langchain_core.prompts import PromptTemplate
 from sqlalchemy.orm import Session
 from docuquery_ai.services.nlp_service import get_llm
 from docuquery_ai.services.vector_store import get_retriever
-from docuquery_ai.services.data_handler import get_interactive_list, execute_filtered_query, load_structured_file, count_matching_rows
+from docuquery_ai.services.data_handler import (
+    get_interactive_list,
+    execute_filtered_query,
+    load_structured_file,
+    count_matching_rows,
+)
 from docuquery_ai.models.pydantic_models import QueryRequest, QueryResponse
 from docuquery_ai.models.db_models import File
 import json
@@ -91,11 +96,12 @@ If the user asks to filter/extract from a structured file, ensure `file_name`, `
 JSON Response:
 """
 
+
 def get_qa_chain():
     llm = get_llm()
     retriever = get_retriever()
     if not retriever:
-        return None # Handle case where vector store is not ready
+        return None  # Handle case where vector store is not ready
 
     # Generic RAG prompt
     prompt_template = """Use the following pieces of context to answer the question at the end.
@@ -107,57 +113,81 @@ Context: {context}
 Question: {question}
 
 Helpful Answer:"""
-    PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-    
+    PROMPT = PromptTemplate(
+        template=prompt_template, input_variables=["context", "question"]
+    )
+
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
-        chain_type="stuff", # or "map_reduce", "refine"
+        chain_type="stuff",  # or "map_reduce", "refine"
         retriever=retriever,
         chain_type_kwargs={"prompt": PROMPT},
-        return_source_documents=True
+        return_source_documents=True,
     )
     return qa_chain
 
-async def process_query(query_request: QueryRequest, user_id: str, db: Session) -> QueryResponse:
+
+async def process_query(
+    query_request: QueryRequest, user_id: str, db: Session
+) -> QueryResponse:
     llm = get_llm()
     retriever = get_retriever()
     user_query = query_request.question
     file_ids = query_request.file_ids
 
     if not retriever:
-        return QueryResponse(answer="Vector store not initialized. Please upload files first.", type="text")
+        return QueryResponse(
+            answer="Vector store not initialized. Please upload files first.",
+            type="text",
+        )
 
     # 1. Build context for the LLM, including file list
     user_files = db.query(File).filter(File.user_id == user_id).all()
-    file_context_str = "\n".join([f"- {f.filename} (type: {'structured' if f.is_structured else 'unstructured'})" for f in user_files])
-    
+    file_context_str = "\n".join(
+        [
+            f"- {f.filename} (type: {'structured' if f.is_structured else 'unstructured'})"
+            for f in user_files
+        ]
+    )
+
     # Check if a specific file is being targeted
     specified_file_info = "None"
     if file_ids:
         # For simplicity, we handle the first specified file ID. Multi-file context can be complex.
-        target_file = db.query(File).filter(File.id == file_ids[0], File.user_id == user_id).first()
+        target_file = (
+            db.query(File)
+            .filter(File.id == file_ids[0], File.user_id == user_id)
+            .first()
+        )
         if target_file:
             specified_file_info = f"{target_file.filename} (type: {'structured' if target_file.is_structured else 'unstructured'})"
-    
+
     # 2. Intent Recognition
     intent_prompt = PromptTemplate(
         template=INTENT_PROMPT_TEMPLATE,
-        input_variables=["tool_descriptions", "user_query", "context", "specified_file"]
+        input_variables=[
+            "tool_descriptions",
+            "user_query",
+            "context",
+            "specified_file",
+        ],
     )
-    
+
     formatted_intent_prompt = intent_prompt.format(
         tool_descriptions=TOOL_DESCRIPTIONS,
         user_query=user_query,
         context=file_context_str,
-        specified_file=specified_file_info
+        specified_file=specified_file_info,
     )
 
     try:
         intent_response = await llm.ainvoke(formatted_intent_prompt)
         intent_response_str = intent_response.content
-        
+
         if "```json" in intent_response_str:
-            intent_response_str = intent_response_str.split("```json")[1].split("```")[0].strip()
+            intent_response_str = (
+                intent_response_str.split("```json")[1].split("```")[0].strip()
+            )
         elif "```" in intent_response_str:
             intent_response_str = intent_response_str.strip("`").strip()
 
@@ -165,54 +195,79 @@ async def process_query(query_request: QueryRequest, user_id: str, db: Session) 
         intent = intent_data.get("intent")
         parameters = intent_data.get("parameters", {})
     except Exception as e:
-        print(f"Error parsing LLM intent response: {e}. Defaulting to general retrieval.")
+        print(
+            f"Error parsing LLM intent response: {e}. Defaulting to general retrieval."
+        )
         intent = "retrieve_general_info"
         parameters = {"query": user_query}
 
     # If a specific file is targeted, ensure it's used as the file_name
     if specified_file_info != "None" and "file_name" not in parameters:
-         if intent in ["filter_structured_data", "list_column_values"]:
-              parameters["file_name"] = specified_file_info.split(" (")[0]
-
+        if intent in ["filter_structured_data", "list_column_values"]:
+            parameters["file_name"] = specified_file_info.split(" (")[0]
 
     # 3. Dispatch to appropriate handler
     if intent == "list_column_values":
         try:
             file_name = parameters.get("file_name")
             if not file_name:
-                return QueryResponse(answer="Could not determine the target file for the query. Please specify the file.", type="text")
-            
+                return QueryResponse(
+                    answer="Could not determine the target file for the query. Please specify the file.",
+                    type="text",
+                )
+
             # Verify this file belongs to the user
-            file_record = db.query(File).filter(File.filename == file_name, File.user_id == user_id).first()
+            file_record = (
+                db.query(File)
+                .filter(File.filename == file_name, File.user_id == user_id)
+                .first()
+            )
             if not file_record:
-                return QueryResponse(answer=f"File '{file_name}' not found for the current user.", type="text")
+                return QueryResponse(
+                    answer=f"File '{file_name}' not found for the current user.",
+                    type="text",
+                )
 
             column_name = parameters.get("column_name")
             sheet_name = parameters.get("sheet_name")
             if not column_name:
                 raise ValueError("Missing column_name for list_column_values")
 
-            result_list = get_interactive_list(file_record.file_path, column_name, sheet_name)
-            
+            result_list = get_interactive_list(
+                file_record.file_path, column_name, sheet_name
+            )
+
             return QueryResponse(
                 answer=f"Unique values for '{column_name}' in '{file_name}':",
                 type="list",
                 data=result_list,
-                file_context=file_name
+                file_context=file_name,
             )
         except Exception as e:
-            return QueryResponse(answer=f"Error processing list request: {str(e)}", type="text")
+            return QueryResponse(
+                answer=f"Error processing list request: {str(e)}", type="text"
+            )
 
     elif intent == "filter_structured_data":
         try:
             file_name = parameters.get("file_name")
             if not file_name:
-                return QueryResponse(answer="Could not determine the target file for the query. Please specify the file.", type="text")
-            
+                return QueryResponse(
+                    answer="Could not determine the target file for the query. Please specify the file.",
+                    type="text",
+                )
+
             # Verify this file belongs to the user
-            file_record = db.query(File).filter(File.filename == file_name, File.user_id == user_id).first()
+            file_record = (
+                db.query(File)
+                .filter(File.filename == file_name, File.user_id == user_id)
+                .first()
+            )
             if not file_record:
-                return QueryResponse(answer=f"File '{file_name}' not found for the current user.", type="text")
+                return QueryResponse(
+                    answer=f"File '{file_name}' not found for the current user.",
+                    type="text",
+                )
 
             df = execute_filtered_query(
                 file_path=file_record.file_path,
@@ -220,13 +275,15 @@ async def process_query(query_request: QueryRequest, user_id: str, db: Session) 
                 sheet_name=parameters.get("sheet_name"),
                 drop_duplicates=parameters.get("drop_duplicates", False),
                 subset=parameters.get("subset"),
-                return_columns=parameters.get("return_columns")
+                return_columns=parameters.get("return_columns"),
             )
-            
+
             # Check if DataFrame is empty
             if df.empty:
-                return QueryResponse(answer="No matching data found for your query.", type="text")
-            
+                return QueryResponse(
+                    answer="No matching data found for your query.", type="text"
+                )
+
             return QueryResponse(
                 answer=f"Filtered data from '{file_name}':",
                 type="table",
@@ -235,22 +292,32 @@ async def process_query(query_request: QueryRequest, user_id: str, db: Session) 
                 download_available=True,
                 download_filename=f"filtered_{file_name.replace('.csv', '').replace('.xlsx', '')}.csv",
                 file_context=file_name,
-                query_params_for_download=parameters.get("query_params")
+                query_params_for_download=parameters.get("query_params"),
             )
         except Exception as e:
-            return QueryResponse(answer=f"Error processing data filtering request: {str(e)}", type="text")
+            return QueryResponse(
+                answer=f"Error processing data filtering request: {str(e)}", type="text"
+            )
 
-    else: # Default to RAG
+    else:  # Default to RAG
         qa_chain = get_qa_chain()
         if not qa_chain:
-            return QueryResponse(answer="Vector store not initialized. Please upload files first.", type="text")
-        
+            return QueryResponse(
+                answer="Vector store not initialized. Please upload files first.",
+                type="text",
+            )
+
         result = qa_chain({"question": user_query})
-        
-        sources = "\n".join([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in result.get("source_documents", [])])
-        
+
+        sources = "\n".join(
+            [
+                os.path.basename(doc.metadata.get("source", "Unknown"))
+                for doc in result.get("source_documents", [])
+            ]
+        )
+
         return QueryResponse(
             answer=result.get("result", "No answer found."),
             sources=sources,
-            type="text"
+            type="text",
         )
