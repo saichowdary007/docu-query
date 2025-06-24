@@ -4,18 +4,16 @@ from .db_models import User, File
 from .pydantic_models import (
     QueryRequest,
     QueryResponse,
-    FileUploadResponse,
-    UserCreate,
-    UserResponse,
+    FileProcessRequest,
 )
-from .user import UserRole, TokenPayload
+from .user import UserRole, TokenPayload, UserCreate, UserResponse
 
 __all__ = [
     "User",
     "File", 
     "QueryRequest",
     "QueryResponse",
-    "FileUploadResponse",
+    "FileProcessRequest",
     "UserCreate",
     "UserResponse",
     "UserRole",

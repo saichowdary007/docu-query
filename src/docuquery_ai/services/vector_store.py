@@ -121,4 +121,4 @@ def get_retriever(k_results=5):
     return vector_store.as_retriever(search_kwargs={"k": k_results})
 
 # Call initialize_vector_store() on app startup if index exists
-# This can be done in main.py: app.on_event("startup")
+# This can be done in web server initialization if using FastAPI

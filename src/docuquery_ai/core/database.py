@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, inspect, exc
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 import sqlite3
 from docuquery_ai.core.config import settings

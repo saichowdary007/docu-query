@@ -59,11 +59,24 @@ class DocumentQueryClient:
         os.makedirs(self.settings.VECTOR_STORE_PATH, exist_ok=True)
         os.makedirs(self.settings.TEMP_UPLOAD_FOLDER, exist_ok=True)
         
+        # Validate environment variables for production use
+        self._validate_credentials()
+        
         # Initialize database and vector store
         init_db()
         initialize_vector_store()
         
         self._initialized = True
+    
+    def _validate_credentials(self):
+        """Validate that required credentials are set for production use."""
+        if (self.settings.GOOGLE_API_KEY == "test-api-key" or 
+            self.settings.GOOGLE_PROJECT_ID == "test-project-id"):
+            print("⚠️  Warning: Using test credentials. Set GOOGLE_API_KEY and GOOGLE_PROJECT_ID environment variables for production use.")
+        
+        if (self.settings.API_KEY == "test-security-key" or 
+            self.settings.JWT_SECRET_KEY == "test-jwt-secret-key"):
+            print("⚠️  Warning: Using test security keys. Set API_KEY and JWT_SECRET_KEY environment variables for production use.")
     
     def upload_document(self, 
                        file_path: str, 

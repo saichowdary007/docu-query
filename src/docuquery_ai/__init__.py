@@ -14,7 +14,9 @@ from .core.config import Settings
 from .models.pydantic_models import (
     QueryRequest,
     QueryResponse,
-    FileUploadResponse,
+    FileProcessRequest,
+)
+from .models.user import (
     UserCreate,
     UserResponse
 )
@@ -24,7 +26,7 @@ __all__ = [
     "Settings", 
     "QueryRequest",
     "QueryResponse",
-    "FileUploadResponse",
+    "FileProcessRequest",
     "UserCreate",
     "UserResponse",
 ] 
