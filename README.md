@@ -1,8 +1,6 @@
 # DocuQuery AI
 
-# DocuQuery AI
-
-[![PyPI package](https://img.shields.io/pypi/v/docuquery-ai.svg?color=brightgreen)](https://pypi.org/project/docuquery-ai/) [![Python Support](https://img.shields.io/pypi/pyversions/docuquery-ai.svg)](https://pypi.org/project/docuquery-ai/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI package](https://img.shields.io/pypi/v/docuquery-ai.svg?color=brightgreen)](https://pypi.org/project/docuquery-ai/) [![Python Support](https://img.shields.io/badge/python-3.8%7C3.9%7C3.10%7C3.11-blue.svg)](https://pypi.org/project/docuquery-ai/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A powerful document query system that combines RAG (Retrieval-Augmented Generation) with structured data handling capabilities. Upload documents and interact with them through natural language queries.
 
