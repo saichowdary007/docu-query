@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import Embeddings
+import numpy as np
 from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
@@ -26,8 +27,7 @@ class GeminiChatModel(BaseChatModel):
         """Return the type of LLM."""
         return "gemini"
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
     
     def _generate(self, 
                  messages: List[BaseMessage], 
@@ -116,12 +116,40 @@ class GeminiChatModel(BaseChatModel):
         # In a production environment, use an async HTTP client like aiohttp
         return self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
+class MockEmbeddings(Embeddings):
+    """Mock embeddings model for testing when Google credentials are not available."""
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Generate mock embeddings for documents."""
+        # Generate consistent but meaningless embeddings for testing
+        embeddings = []
+        for i, text in enumerate(texts):
+            # Create a simple hash-based embedding
+            embedding = np.random.RandomState(hash(text) % 2**32).normal(0, 1, 768).tolist()
+            embeddings.append(embedding)
+        return embeddings
+    
+    def embed_query(self, text: str) -> List[float]:
+        """Generate mock embedding for a query."""
+        return np.random.RandomState(hash(text) % 2**32).normal(0, 1, 768).tolist()
+
 def get_embeddings_model() -> Embeddings:
     """Returns the configured embeddings model for the application."""
-    # This uses the official Google Vertex AI embeddings, which requires
-    # GOOGLE_APPLICATION_CREDENTIALS or gcloud auth to be configured.
-    # The project_id is automatically picked up from the environment.
-    return VertexAIEmbeddings(model_name="textembedding-gecko@latest")
+    # Check if we're using test credentials
+    if (settings.GOOGLE_API_KEY == "test-api-key" or 
+        settings.GOOGLE_PROJECT_ID == "test-project-id"):
+        print("⚠️  Using mock embeddings model for testing. Set real Google credentials for production.")
+        return MockEmbeddings()
+    
+    try:
+        # This uses the official Google Vertex AI embeddings, which requires
+        # GOOGLE_APPLICATION_CREDENTIALS or gcloud auth to be configured.
+        # The project_id is automatically picked up from the environment.
+        return VertexAIEmbeddings(model_name="textembedding-gecko@latest")
+    except Exception as e:
+        print(f"⚠️  Failed to initialize Vertex AI embeddings: {e}")
+        print("⚠️  Falling back to mock embeddings model.")
+        return MockEmbeddings()
 
 def get_llm() -> BaseChatModel:
     """Returns the configured large language model for the application."""
