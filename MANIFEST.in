@@ -1,0 +1,29 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include pyproject.toml
+include MANIFEST.in
+
+# Include package data
+recursive-include src/docuquery_ai *.py
+recursive-include src/docuquery_ai *.txt
+recursive-include src/docuquery_ai *.md
+recursive-include src/docuquery_ai *.yml
+recursive-include src/docuquery_ai *.yaml
+recursive-include src/docuquery_ai *.json
+
+# Exclude development and build files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude .git*
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude *.dylib
+global-exclude .pytest_cache
+global-exclude .coverage
+global-exclude htmlcov
+
+# Exclude development and IDE files
+global-exclude .DS_Store 

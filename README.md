@@ -1,250 +1,227 @@
 # DocuQuery AI
 
+[![PyPI version](https://badge.fury.io/py/docuquery-ai.svg)](https://badge.fury.io/py/docuquery-ai)
+[![Python Support](https://img.shields.io/pypi/pyversions/docuquery-ai.svg)](https://pypi.org/project/docuquery-ai/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A powerful document query system that combines RAG (Retrieval-Augmented Generation) with structured data handling capabilities. Upload documents and interact with them through natural language queries.
 
 ## Features
 
-- **Document Processing**:
-  - Supports PDF, DOCX, PPTX, TXT, MD files
-  - Handles structured data (CSV, XLS, XLSX)
-  - Automatic text chunking and embedding
-  - Vector store for semantic search
+- **Document Processing**: Supports PDF, DOCX, PPTX, TXT, MD files
+- **Structured Data**: Handles CSV, XLS, XLSX with direct data operations
+- **Vector Search**: Automatic text chunking and embedding with FAISS
+- **Natural Language Queries**: RAG for unstructured documents
+- **Google Vertex AI**: Integration with Google's LLM and embedding models
+- **CLI Interface**: Command-line tool for easy document management
+- **Python API**: Clean programmatic interface for integration
 
-- **Query Capabilities**:
-  - Natural language understanding
-  - RAG for unstructured documents
-  - Direct data operations on structured files
-  - Table filtering and downloads
-  - Entity extraction
+## Installation
 
-- **Modern UI**:
-  - Real-time chat interface
-  - Drag-and-drop file upload
-  - Interactive data visualization
-  - Responsive design
-  - Modern UI animations with Magic UI components
-  - Premium shine border effects
+Install from PyPI:
 
-## Tech Stack
+```bash
+pip install docuquery-ai
+```
 
-### Backend
-- FastAPI
-- LangChain
-- Google Vertex AI (Embeddings & LLM)
-- FAISS Vector Store
-- Pandas for structured data
-- Various document parsers (PyPDF2, python-docx, etc.)
+For development with optional dependencies:
 
-### Frontend
-- Next.js 14
-- React
-- TypeScript
-- TailwindCSS
-- React Dropzone
+```bash
+pip install docuquery-ai[dev,web]
+```
 
-## Setup
+For GPU acceleration (if you have CUDA):
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/docuquery-ai.git
-   cd docuquery-ai
-   ```
+```bash
+pip install docuquery-ai[gpu]
+```
 
-2. **Set up environment variables**:
-   ```bash
-   # Copy example env files
-   cp backend/.env.example backend/.env
-   ```
-   Edit the `.env` file with your:
-   - Google Cloud credentials
-   - Backend API key
-   - Other configuration
+## Quick Start
 
-3. **Using Docker (Recommended)**:
-   ```bash
-   docker-compose up --build
-   ```
-   This will start both frontend and backend services.
+### 1. Set up Google Cloud credentials
 
-4. **Manual Setup**:
-   
-   Backend:
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload
-   ```
+```bash
+export GOOGLE_API_KEY="your-google-api-key"
+export GOOGLE_PROJECT_ID="your-google-project-id"
+```
 
-   Frontend:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+### 2. Python API Usage
 
-5. **Access the application**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+```python
+from docuquery_ai import DocumentQueryClient
 
-## Usage
+# Initialize the client
+client = DocumentQueryClient(
+    google_api_key="your-api-key",
+    google_project_id="your-project-id"
+)
 
-1. **Upload Documents**:
-   - Use the file upload interface
-   - Drag & drop supported
-   - Multiple files accepted
+# Upload a document
+result = client.upload_document("path/to/document.pdf")
+print(f"Uploaded: {result['filename']}")
 
-2. **Query Your Documents**:
-   - Type natural language questions
-   - Ask about document content
-   - Request specific data from structured files
-   - Download filtered results
+# Query the document
+response = client.query("What are the main topics discussed?")
+print(f"Answer: {response.answer}")
 
-3. **Examples**:
-   ```
-   "What are the main risks mentioned in the report?"
-   "Show me all departments from employees.xlsx"
-   "Find sales records over $50,000"
-   "Extract all dates and locations from the documents"
-   ```
+# List all documents
+documents = client.list_documents()
+for doc in documents:
+    print(f"- {doc['filename']} ({doc['file_type']})")
+```
+
+### 3. CLI Usage
+
+Initialize DocuQuery AI:
+
+```bash
+docuquery init
+```
+
+Upload a document:
+
+```bash
+docuquery upload document.pdf
+```
+
+Query your documents:
+
+```bash
+docuquery query "What are the key findings?"
+```
+
+List uploaded documents:
+
+```bash
+docuquery list
+```
+
+Get help:
+
+```bash
+docuquery --help
+```
+
+## Supported File Types
+
+- **Text Documents**: PDF, DOCX, PPTX, TXT, MD
+- **Structured Data**: CSV, XLS, XLSX
+- **Archives**: Processing of multiple files
+
+## Advanced Usage
+
+### Custom Configuration
+
+```python
+from docuquery_ai import DocumentQueryClient
+
+client = DocumentQueryClient(
+    google_api_key="your-api-key",
+    google_project_id="your-project-id",
+    vector_store_path="./custom_vector_db",
+    temp_upload_folder="./custom_temp"
+)
+```
+
+### Query Specific Files
+
+```python
+# Upload multiple files
+file1_result = client.upload_document("report1.pdf")
+file2_result = client.upload_document("data.xlsx")
+
+# Query specific files
+response = client.query(
+    "Compare the metrics between reports",
+    file_ids=[file1_result['file_id'], file2_result['file_id']]
+)
+```
+
+### Using with Different Users
+
+```python
+# Upload documents for different users
+client.upload_document("doc1.pdf", user_id="user_123")
+client.upload_document("doc2.pdf", user_id="user_456")
+
+# Query documents for specific user
+response = client.query("Summarize the content", user_id="user_123")
+```
 
 ## Architecture
 
 The system uses a hybrid approach:
-- RAG for unstructured documents (PDF, DOCX, etc.)
-- Direct data operations for structured files (CSV, Excel)
-- LLM for query understanding and response generation
-- Vector store for semantic search
-- Caching for structured data operations
+
+- **RAG Pipeline**: For unstructured documents (PDF, DOCX, etc.)
+- **Direct Data Operations**: For structured files (CSV, Excel)
+- **Vector Store**: FAISS for semantic search
+- **LLM Integration**: Google Vertex AI for query understanding and response generation
+- **Database**: SQLite for metadata and file tracking
+
+## CLI Commands
+
+- `docuquery init` - Initialize configuration
+- `docuquery upload <file>` - Upload and process a document
+- `docuquery query "<question>"` - Query uploaded documents
+- `docuquery list` - List all uploaded documents
+- `docuquery delete <file_id>` - Delete a document
+- `docuquery --help` - Show help information
 
 ## Development
 
-- **Backend Structure**:
-  - `app/`: Main application code
-  - `core/`: Configuration and security
-  - `models/`: Pydantic models
-  - `services/`: Business logic
-  - `routers/`: API endpoints
+### Installing for Development
 
-- **Frontend Structure**:
-  - `app/`: Next.js app directory
-  - `components/`: React components
-  - `styles/`: CSS and styling
+```bash
+git clone https://github.com/saichowdary007/DocuQuery-AI.git
+cd DocuQuery-AI
+pip install -e .[dev]
+```
+
+### Running Tests
+
+```bash
+pytest
+```
+
+### Code Formatting
+
+```bash
+black src/
+isort src/
+```
+
+## Requirements
+
+- Python 3.8+
+- Google Cloud credentials (API key or service account)
+- Internet connection for Google Vertex AI API calls
+
+## Environment Variables
+
+- `GOOGLE_API_KEY` - Google API key for Vertex AI
+- `GOOGLE_PROJECT_ID` - Google Cloud project ID
+- `GOOGLE_LOCATION` - Google Cloud location (default: us-central1)
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- [GitHub Issues](https://github.com/saichowdary007/DocuQuery-AI/issues)
+- [Documentation](https://github.com/saichowdary007/DocuQuery-AI/blob/main/README.md)
 
 ## Acknowledgments
 
-- LangChain for RAG implementation
-- Google Vertex AI for ML capabilities
-- FastAPI for the robust backend
-- Next.js team for the frontend framework
-
-## UI Components
-
-The application uses custom Magic UI components to create a premium look and feel:
-
-### BorderBeam Component
-
-The BorderBeam component adds a beautiful animated shine effect to containers, creating a premium border animation that draws attention to important UI elements. Used in:
-
-- Chat interface
-- File uploader
-- Application header
-
-To use the BorderBeam component:
-
-```jsx
-import { BorderBeam } from '@/app/components/ui/border-beam';
-
-// Inside your component
-<div className="relative overflow-hidden">
-  <BorderBeam 
-    size={80}
-    duration={8}
-    colorFrom="#3B82F6" 
-    colorTo="#8B5CF6"
-  />
-  {/* Your content */}
-</div>
-```
-
-#### Properties
-
-- `size`: Size of the beam effect (default: 50)
-- `duration`: Animation duration in seconds (default: 6)
-- `colorFrom`: Start color of the gradient (default: "#ffaa40")
-- `colorTo`: End color of the gradient (default: "#9c40ff")
-- `reverse`: Reverse animation direction (default: false)
-
-## Deployment Instructions
-
-### Deploying to Vercel
-
-1. **Setup Vercel Environment Variables**:
-   - Go to your Vercel project settings
-   - Add the following environment variables:
-     - `NEXT_PUBLIC_BACKEND_URL`: URL of your backend API (e.g., https://your-backend-api.com)
-     - `NEXT_PUBLIC_BACKEND_API_KEY`: Secret API key for backend authentication
-
-### Deploying to Render
-
-1. **Setup Render Blueprint**:
-   - The included `render.yaml` file configures the deployment
-   - It will automatically create database and necessary services
-
-2. **Environment Variables**:
-   - Most variables are automatically set through the blueprint
-   - Custom variables like API keys need to be set in the Render dashboard
-
-3. **Default Admin User**:
-   - On first deployment, an admin user is automatically created 
-   - Default email: `admin@docuquery.ai` (can be customized via `SEED_ADMIN_EMAIL`)
-   - Password: Auto-generated (view in Render logs or set via `SEED_ADMIN_PASSWORD`)
-   - Use these credentials for the initial login
-   - Create additional users through the application
-
-4. **Important Notes**:
-   - Database setup happens automatically on first deployment
-   - Uploaded files are stored in a persistent disk
-   - API documentation available at `/docs` endpoint
-
-## Local Development
-
-```bash
-# Install dependencies
-npm install
-cd frontend && npm install
-
-# Run frontend and backend concurrently
-npm run dev
-
-# Run frontend only
-npm run dev:frontend
-
-# Run backend only
-npm run dev:backend
-```
-
-## Project Structure
-
-- `frontend/`: Next.js application
-- `backend/`: FastAPI application for document processing and querying
-
-## Technologies Used
-
-- **Frontend**: Next.js, React, TailwindCSS, Framer Motion
-- **Backend**: FastAPI, LangChain, FAISS, Python
-- **Document Processing**: LangChain document loaders and processors
+- [LangChain](https://github.com/hwchase17/langchain) for RAG implementation
+- [Google Vertex AI](https://cloud.google.com/vertex-ai) for ML capabilities
+- [FAISS](https://github.com/facebookresearch/faiss) for vector search
+- [FastAPI](https://fastapi.tiangolo.com/) for the web framework
