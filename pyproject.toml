@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A powerful document query system using RAG and LLM technologies"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
+license = { text = "MIT" }
 authors = [
     {name = "DocuQuery AI Team", email = "contact@docuquery-ai.com"}
 ]
@@ -84,11 +84,11 @@ gpu = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/saichowdary007/DocuQuery-AI"
-Documentation = "https://github.com/saichowdary007/DocuQuery-AI/blob/main/README.md"
-Repository = "https://github.com/saichowdary007/DocuQuery-AI.git"
-Issues = "https://github.com/saichowdary007/DocuQuery-AI/issues"
-Changelog = "https://github.com/saichowdary007/DocuQuery-AI/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/saichowdary007/docu-query"
+Documentation = "https://github.com/saichowdary007/docu-query/blob/main/README.md"
+Repository = "https://github.com/saichowdary007/docu-query.git"
+Issues = "https://github.com/saichowdary007/docu-query/issues"
+Changelog = "https://github.com/saichowdary007/docu-query/blob/main/CHANGELOG.md"
 
 [project.scripts]
 docuquery = "docuquery_ai.cli.main:main"
