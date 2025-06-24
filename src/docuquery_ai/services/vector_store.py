@@ -43,9 +43,10 @@ def initialize_vector_store(documents: List[Document] = None):
 
 
 def add_documents_to_store(documents: List[Document]):
-    global vector_store
+    global vector_store  # noqa: F824
     if not vector_store:
-        initialize_vector_store(documents) # This will create and save
+        initialize_vector_store(documents)  # This will create and save
+        # Note: initialize_vector_store modifies the global vector_store
     else:
         vector_store.add_documents(documents)
         vector_store.save_local(FAISS_INDEX_PATH)
