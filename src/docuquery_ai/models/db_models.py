@@ -1,6 +1,14 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Enum as SQLAlchemyEnum, ForeignKey, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum as SQLAlchemyEnum,
+    ForeignKey,
+    String,
+    Text,
+)
 from sqlalchemy.sql import func
 
 from docuquery_ai.core.database import Base
