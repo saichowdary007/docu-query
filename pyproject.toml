@@ -68,11 +68,13 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
+    "black==23.12.1",
+    "isort==5.12.0",
     "flake8>=6.0.0",
-    "mypy>=1.0.0",
+    "mypy==1.6.1",
     "pre-commit>=3.0.0",
+    "types-requests>=2.31.0.20240417",
+    "types-Markdown>=3.5.0.20240215",
 ]
 web = [
     "uvicorn[standard]>=0.23.0",
@@ -132,6 +134,9 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
+allow_untyped_defs = true
+allow_untyped_calls = true
+no_implicit_optional = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

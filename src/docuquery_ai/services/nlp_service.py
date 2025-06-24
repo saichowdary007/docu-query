@@ -8,7 +8,6 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration
-from langchain_google_vertexai import VertexAIEmbeddings
 from pydantic import BaseModel, Field
 
 from docuquery_ai.core.config import settings
@@ -52,7 +51,7 @@ class GeminiChatModel(BaseChatModel):
         # A system message can be the first part of the first user message.
 
         gemini_messages = []
-        current_parts = []
+        current_parts: List[str] = []
 
         system_prompt = ""
         user_prompts = []
@@ -165,6 +164,9 @@ def get_embeddings_model() -> Embeddings:
         return MockEmbeddings()
 
     try:
+        # Use lazy import to avoid TypeAlias issues during model initialization
+        from langchain_google_vertexai import VertexAIEmbeddings
+
         # This uses the official Google Vertex AI embeddings, which requires
         # GOOGLE_APPLICATION_CREDENTIALS or gcloud auth to be configured.
         # The project_id is automatically picked up from the environment.
