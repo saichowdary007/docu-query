@@ -4,7 +4,9 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SQLAlchemyEnum,
+)
+from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy import (
     ForeignKey,
     String,
     Text,
