@@ -18,6 +18,7 @@ from .services.vector_store import (
     initialize_vector_store,
     remove_documents_by_source,
 )
+from .services.graph_service import initialize_knowledge_graph, save_knowledge_graph
 
 
 class DocumentQueryClient:
@@ -68,9 +69,10 @@ class DocumentQueryClient:
         # Validate environment variables for production use
         self._validate_credentials()
 
-        # Initialize database and vector store
+        # Initialize database, vector store, and knowledge graph
         init_db()
-        initialize_vector_store()
+        self.vector_store, self.bm25_retriever = initialize_vector_store()
+        self.knowledge_graph = initialize_knowledge_graph()
 
         self._initialized = True
 
@@ -116,11 +118,6 @@ class DocumentQueryClient:
         try:
             # Check if this user has already uploaded a file with the same name
             existing_file = get_file_by_filename(db, filename=filename, user_id=user_id)
-            if existing_file:
-                # If it exists, remove the old one first to ensure a clean update
-                remove_documents_by_source(source=existing_file.filename)
-                db.delete(existing_file)
-                db.commit()
 
             # Parse file into LangChain Document objects
             documents = get_documents_from_file(str(source_path), filename)
@@ -145,7 +142,13 @@ class DocumentQueryClient:
 
             # Add documents to vector store
             if documents:
-                add_documents_to_store(documents)
+                self.vector_store, self.bm25_retriever = add_documents_to_store(self.vector_store, self.bm25_retriever, documents)
+
+            # If an old file with the same name existed, remove it ONLY AFTER the new one is successfully processed
+            if existing_file:
+                self.vector_store, self.bm25_retriever = remove_documents_by_source(self.vector_store, self.bm25_retriever, source=existing_file.filename)
+                db.delete(existing_file)
+                db.commit()
 
             return {
                 "success": True,
@@ -162,7 +165,7 @@ class DocumentQueryClient:
         finally:
             db.close()
 
-    def query(
+    async def query(
         self, question: str, user_id: str, file_ids: Optional[List[str]] = None
     ) -> QueryResponse:
         """
@@ -179,12 +182,12 @@ class DocumentQueryClient:
         if not self._initialized:
             raise RuntimeError("Client not initialized")
 
-        query_request = QueryRequest(question=question, file_ids=file_ids or [])
+        query_request = QueryRequest(query=question)
 
         db = SessionLocal()
         try:
-            response = process_query(
-                query_request=query_request, user_id=user_id, db=db
+            response = await process_query(
+                query_request=query_request, user_id=user_id, db=db, file_ids=file_ids, vector_store=self.vector_store, bm25_retriever=self.bm25_retriever
             )
             return response
         finally:
@@ -249,7 +252,7 @@ class DocumentQueryClient:
 
             if file_record:
                 # 1. Remove from vector store
-                remove_documents_by_source(file_record.filename)
+                self.vector_store, self.bm25_retriever = remove_documents_by_source(self.vector_store, self.bm25_retriever, file_record.filename)
 
                 # 2. Delete the physical file
                 delete_file(file_record.file_path)

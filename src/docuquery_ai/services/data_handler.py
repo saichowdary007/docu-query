@@ -4,13 +4,13 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
+from cachetools import LRUCache
 
 from docuquery_ai.core.config import settings
 
-# Simple cache for loaded dataframes to avoid re-reading constantly
-# Key: filename, Value: pd.DataFrame or Dict[str, pd.DataFrame] for Excel
-# This should ideally be more robust (e.g., Redis, or manage lifetimes)
-STRUCTURED_DATA_CACHE: Dict[str, Any] = {}
+# Cache for loaded dataframes with LRU eviction policy
+# Max size set to 128 to prevent unbounded memory growth
+STRUCTURED_DATA_CACHE = LRUCache(maxsize=128)
 
 
 def load_structured_file(

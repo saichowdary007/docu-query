@@ -2,7 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field
+from pydantic_settings import SettingsConfigDict
 
 
 class UserRole(str, Enum):
@@ -43,8 +48,7 @@ class UserResponse(UserBase):
     id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = SettingsConfigDict(from_attributes=True)
 
 
 class TokenData(BaseModel):

@@ -41,7 +41,6 @@ jobs:
 
       - name: Type check with mypy
         run: mypy src/docuquery_ai/ --ignore-missing-imports
-        continue-on-error: true
 
       - name: Test package installation
         run: |

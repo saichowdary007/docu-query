@@ -44,7 +44,7 @@ dependencies = [
     "langchain-google-vertexai>=0.1.0",
     "langchain-text-splitters>=0.0.1",
     "google-cloud-aiplatform>=1.38.0",
-    "faiss-cpu>=1.7.4",
+    
     "pandas>=1.5.0",
     "xlrd>=2.0.1",
     "openpyxl>=3.1.0",
@@ -61,6 +61,10 @@ dependencies = [
     "email-validator>=2.0.0",
     "sqlalchemy>=2.0.0",
     "click>=8.0.0",
+    "cachetools>=5.0.0",
+    "rank-bm25>=0.1.2",
+    "sentence-transformers>=2.2.2",
+    "networkx>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +84,9 @@ web = [
     "uvicorn[standard]>=0.23.0",
     "gunicorn>=21.0.0",
     "python-multipart>=0.0.6",
+]
+cpu = [
+    "faiss-cpu>=1.7.4",
 ]
 gpu = [
     "faiss-gpu>=1.7.4",

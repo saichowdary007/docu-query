@@ -1,6 +1,6 @@
-import json
 import os
 from copy import deepcopy
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 from langchain.chains import RetrievalQA
@@ -15,93 +15,56 @@ from docuquery_ai.services.data_handler import (
     get_interactive_list,
     load_structured_file,
 )
-from docuquery_ai.services.nlp_service import get_llm
+from docuquery_ai.services.nlp_service import get_llm, get_embeddings_model
 from docuquery_ai.services.vector_store import get_retriever
+from docuquery_ai.services.graph_service import get_knowledge_graph
 
-# This is a crucial part: Intent recognition and dispatching
-# For a production system, this would be more sophisticated, possibly using
-# LLM function calling or a dedicated NLU model.
+# New imports for structured output
+from pydantic import BaseModel, Field
+from langchain_core.messages import HumanMessage, SystemMessage
 
-# Tool/Intent definitions (conceptual)
-# This helps the LLM understand what actions it can suggest or what information it needs.
-TOOL_DESCRIPTIONS = """
-Available tools:
-1.  **retrieve_general_info**: Use this for general questions about the content of uploaded documents.
-    Input: User's query.
-    Output: Answer based on document context.
+# Define Pydantic models for structured output
+class RetrieveGeneralInfo(BaseModel):
+    """Use this for general questions about the content of uploaded documents."""
+    query: str = Field(description="User's query.")
 
-2.  **list_column_values**: Use this when the user asks to see all unique values in a specific column of a CSV or Excel file (e.g., "Show all departments", "List all project names from sheet X").
-    Input: {"file_name": "example.xlsx", "sheet_name": "Sheet1" (optional), "column_name": "Department"}
-    Output: A list of unique values.
+class ListColumnValues(BaseModel):
+    """Use this when the user asks to see all unique values in a specific column of a CSV or Excel file."""
+    file_name: str = Field(description="Name of the CSV or Excel file.")
+    column_name: str = Field(description="Name of the column to list values from.")
+    sheet_name: Optional[str] = Field(None, description="Name of the sheet for Excel files.")
 
-3.  **filter_structured_data**: Use this when the user wants to extract specific data from a CSV or Excel file based on conditions (e.g., "Find employees aged 35", "Extract salaries > $50k").
-    Input: {"file_name": "example.csv", "sheet_name": "Sheet1" (optional), "query_params": {"column": "Age", "operator": "==", "value": "35"}, "drop_duplicates": true/false (optional), "return_columns": ["Name","Salary"] (optional)}
-    Output: A table of results or a message if no results.
+class QueryParamItem(BaseModel):
+    column: str = Field(description="Column name for filtering.")
+    operator: str = Field(description="Comparison operator (e.g., '==', '>', '<', 'contains').")
+    value: Any = Field(description="Value to compare against.")
 
-4.  **extract_entities**: Use this when the user asks for specific entities like names, dates, or organizations from text.
-    Input: User's query.
-    Output: List of extracted entities.
-"""
+class FilterStructuredData(BaseModel):
+    """Use this when the user wants to extract specific data from a CSV or Excel file based on conditions."""
+    file_name: str = Field(description="Name of the CSV or Excel file.")
+    query_params: Union[QueryParamItem, List[QueryParamItem]] = Field(description="Filtering conditions. Can be a single condition or a list of conditions.")
+    sheet_name: Optional[str] = Field(None, description="Name of the sheet for Excel files.")
+    drop_duplicates: Optional[bool] = Field(False, description="Whether to drop duplicate rows. Default to false if not specified.")
+    subset: Optional[List[str]] = Field(None, description="List of columns to consider when dropping duplicates.")
+    return_columns: Optional[List[str]] = Field(None, description="List of columns to return from the filtered data.")
 
-# More sophisticated prompt engineering for intent detection and parameter extraction.
-# We can guide the LLM to output a JSON object specifying the intent and parameters.
+class ExtractEntities(BaseModel):
+    """Use this when the user asks for specific entities like names, dates, or organizations from text."""
+    query: str = Field(description="User's query.")
 
-INTENT_PROMPT_TEMPLATE = """
-You are an AI assistant that helps users query information from uploaded documents.
-Based on the user's query and the available tools, determine the user's intent and the necessary parameters.
-If the query is about a CSV or Excel file, pay attention to file names, sheet names (if any), column names, and filter conditions.
+class GraphQuery(BaseModel):
+    """Use this when the user asks questions that require understanding relationships between entities across documents, such as 'Who worked on Project X?' or 'What documents mention both A and B?'."
+    query: str = Field(description="The natural language query that can be translated into a graph traversal.")
+    entities: Optional[List[str]] = Field(None, description="List of key entities mentioned in the query that might be nodes in the graph.")
+    relationships: Optional[List[str]] = Field(None, description="List of potential relationship types to look for in the graph.")
 
-Available tools:
-{tool_descriptions}
+# Union of all possible structured outputs
+IntentOutput = Union[RetrieveGeneralInfo, ListColumnValues, FilterStructuredData, ExtractEntities, GraphQuery]
 
-User Query: "{user_query}"
-
-Uploaded files context (summaries of structured files are included if relevant):
-{context}
-
-Selected file (if specified): {specified_file}
-
-Based on the query and context, determine the primary intent.
-If a specific file is specified, prioritize that file for your query.
-If the intent is `list_column_values` or `filter_structured_data`, identify the target file, sheet (if applicable), column, any filter conditions, and (optionally) a list of columns to return (`return_columns`).
-If a selected file is specified and is a structured file, assume the query is about that file.
-If the intent is general retrieval or entity extraction from text, use `retrieve_general_info` or `extract_entities`.
-
-For queries related to structured data, look for indications about duplicates in the query:
-- If the user is asking about specific values or unique entries, include "drop_duplicates": true
-- If the user mentions wanting to see all data including duplicates, include "drop_duplicates": false
-- By default, assume duplicates should be shown (drop_duplicates: false)
-
-For complex queries with multiple conditions (e.g., "show males with age over 30"), create a list of conditions and include `return_columns` if the user requests specific fields:
-{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": [
-  {{"column": "Gender", "operator": "==", "value": "Male"}},
-  {{"column": "Age", "operator": ">", "value": "30"}}
-], "drop_duplicates": false, "return_columns": ["Name","Age"]}}}}
-
-Output your decision as a JSON object with "intent" and "parameters" keys.
-For example:
-{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": {{"column": "Salary", "operator": ">", "value": "50000"}}, "drop_duplicates": false}}}}
-OR
-{{"intent": "filter_structured_data", "parameters": {{"file_name": "employees.xlsx", "sheet_name": "Q1_Data", "query_params": [
-  {{"column": "Department", "operator": "==", "value": "Sales"}},
-  {{"column": "Salary", "operator": ">", "value": "50000"}}
-], "drop_duplicates": false}}}}
-OR
-{{"intent": "list_column_values", "parameters": {{"file_name": "projects.csv", "column_name": "Project Lead"}}}}
-OR
-{{"intent": "retrieve_general_info", "parameters": {{"query": "What are the main risks mentioned in project_report.pdf?"}}}}
-
-If you are unsure, or the query is ambiguous, you can ask for clarification or default to `retrieve_general_info`.
-If the user asks to list something from a structured file (CSV/Excel), ensure `file_name` and `column_name` are identified for `list_column_values`.
-If the user asks to filter/extract from a structured file, ensure `file_name`, `query_params` (with `column`, `operator`, `value`) are identified for `filter_structured_data`.
-
-JSON Response:
-"""
-
-
-def get_qa_chain():
+def get_qa_chain(vector_store, bm25_retriever, knowledge_graph):
     llm = get_llm()
-    retriever = get_retriever()
+    embeddings = get_embeddings_model()
+    retriever = get_retriever(vector_store, bm25_retriever, llm, embeddings, knowledge_graph)
     if not retriever:
         return None  # Handle case where vector store is not ready
 
@@ -130,12 +93,13 @@ Helpful Answer:"""
 
 
 async def process_query(
-    query_request: QueryRequest, user_id: str, db: Session
+    query_request: QueryRequest, user_id: str, db: Session, file_ids: Optional[list[str]] = None, vector_store=None, bm25_retriever=None
 ) -> QueryResponse:
     llm = get_llm()
-    retriever = get_retriever()
-    user_query = query_request.question
-    file_ids = query_request.file_ids
+    knowledge_graph = get_knowledge_graph()
+    retriever = get_retriever(vector_store, bm25_retriever, llm, get_embeddings_model(), knowledge_graph)
+    user_query = query_request.query
+    
 
     if not retriever:
         return QueryResponse(
@@ -164,44 +128,54 @@ async def process_query(
         if target_file:
             specified_file_info = f"{target_file.filename} (type: {'structured' if target_file.is_structured else 'unstructured'})"
 
-    # 2. Intent Recognition
-    intent_prompt = PromptTemplate(
-        template=INTENT_PROMPT_TEMPLATE,
-        input_variables=[
-            "tool_descriptions",
-            "user_query",
-            "context",
-            "specified_file",
-        ],
-    )
+    # 2. Intent Recognition using structured output
+    # Define the LLM with structured output
+    structured_llm = llm.with_structured_output(IntentOutput)
 
-    formatted_intent_prompt = intent_prompt.format(
-        tool_descriptions=TOOL_DESCRIPTIONS,
-        user_query=user_query,
-        context=file_context_str,
-        specified_file=specified_file_info,
-    )
+    # Create the prompt for the structured LLM
+    messages = [
+        SystemMessage(
+            content=(
+                "You are an AI assistant that helps users query information from uploaded documents. "
+                "Based on the user's query and the available tools, determine the user's intent and the necessary parameters. "
+                "If the query is about a CSV or Excel file, pay attention to file names, sheet names (if any), column names, and filter conditions. "
+                "If the query involves relationships between entities (e.g., 'Who worked on Project X?', 'Documents by Author Y'), consider the `GraphQuery` tool. "
+                "If you are unsure, or the query is ambiguous, default to `RetrieveGeneralInfo`."
+            )
+        ),
+        HumanMessage(
+            content=(
+                f"Uploaded files context:\n{file_context_str}\n\n"
+                f"Selected file (if specified): {specified_file_info}\n\n"
+                f"User Query: {user_query}"
+            )
+        ),
+    ]
 
     try:
-        intent_response = await llm.ainvoke(formatted_intent_prompt)
-        intent_response_str = intent_response.content
+        # Invoke the structured LLM
+        intent_output_model = await structured_llm.ainvoke(messages)
 
-        if "```json" in intent_response_str:
-            intent_response_str = (
-                intent_response_str.split("```json")[1].split("```")[0].strip()
-            )
-        elif "```" in intent_response_str:
-            intent_response_str = intent_response_str.strip("`").strip()
+        # Extract intent and parameters from the Pydantic model
+        intent = type(intent_output_model).__name__
+        parameters = intent_output_model.dict()
 
-        intent_data = json.loads(intent_response_str)
-        intent = intent_data.get("intent")
-        parameters = intent_data.get("parameters", {})
     except Exception as e:
         print(
-            f"Error parsing LLM intent response: {e}. Defaulting to general retrieval."
+            f"Error with LLM structured output: {e}. Defaulting to general retrieval."
         )
-        intent = "retrieve_general_info"
+        intent = "RetrieveGeneralInfo"
         parameters = {"query": user_query}
+
+    # Map Pydantic model names to the existing intent strings
+    intent_mapping = {
+        "RetrieveGeneralInfo": "retrieve_general_info",
+        "ListColumnValues": "list_column_values",
+        "FilterStructuredData": "filter_structured_data",
+        "ExtractEntities": "extract_entities",
+        "GraphQuery": "graph_query",
+    }
+    intent = intent_mapping.get(intent, "retrieve_general_info")
 
     # If a specific file is targeted, ensure it's used as the file_name
     if specified_file_info != "None" and "file_name" not in parameters:
@@ -271,6 +245,13 @@ async def process_query(
                     type="text",
                 )
 
+            # Convert QueryParamItem objects to dictionaries for execute_filtered_query
+            query_params_from_llm = parameters.get("query_params")
+            if isinstance(query_params_from_llm, QueryParamItem):
+                parameters["query_params"] = query_params_from_llm.dict()
+            elif isinstance(query_params_from_llm, list):
+                parameters["query_params"] = [qp.dict() for qp in query_params_from_llm]
+
             df = execute_filtered_query(
                 file_path=file_record.file_path,
                 query_params=parameters.get("query_params"),
@@ -301,15 +282,55 @@ async def process_query(
                 answer=f"Error processing data filtering request: {str(e)}", type="text"
             )
 
+    elif intent == "graph_query":
+        try:
+            knowledge_graph = get_knowledge_graph()
+            graph_query_text = parameters.get("query", "")
+            graph_entities = parameters.get("entities", [])
+            graph_relationships = parameters.get("relationships", [])
+
+            # Simple graph traversal logic for demonstration
+            # In a real scenario, this would involve more complex graph query translation
+            # and traversal based on the user's query and extracted entities/relationships.
+            results = []
+            if graph_entities:
+                for entity_name in graph_entities:
+                    # Search for nodes matching the entity name
+                    found_nodes = knowledge_graph.search_nodes(entity_name)
+                    for node in found_nodes:
+                        results.append(f"Found entity: {node['properties'].get('name')} (Type: {node['properties'].get('type')})")
+                        # For each found node, list its immediate connections
+                        for u, v, data in knowledge_graph.get_edges(node['id']):
+                            target_node = knowledge_graph.get_node(v)
+                            if target_node:
+                                results.append(f"  - {node['properties'].get('name')} -[{data.get('type')}]-> {target_node.get('name')}")
+            elif graph_relationships:
+                results.append("Graph relationship queries are not fully supported yet. Please try a more specific entity-based query.")
+            else:
+                results.append("Please specify entities or relationships for a graph query.")
+
+            if not results:
+                results.append("No relevant information found in the knowledge graph.")
+
+            return QueryResponse(
+                answer="\n".join(results),
+                type="text",
+                file_context="Knowledge Graph",
+            )
+        except Exception as e:
+            return QueryResponse(
+                answer=f"Error processing graph query: {str(e)}", type="text"
+            )
+
     else:  # Default to RAG
-        qa_chain = get_qa_chain()
+        qa_chain = get_qa_chain(vector_store, bm25_retriever)
         if not qa_chain:
             return QueryResponse(
                 answer="Vector store not initialized. Please upload files first.",
                 type="text",
             )
 
-        result = qa_chain({"question": user_query})
+        result = qa_chain.invoke({"query": user_query})
 
         sources = "\n".join(
             [

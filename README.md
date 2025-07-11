@@ -9,6 +9,10 @@ A powerful document query system that combines RAG (Retrieval-Augmented Generati
 - **Document Processing**: Supports PDF, DOCX, PPTX, TXT, MD files
 - **Structured Data**: Handles CSV, XLS, XLSX with direct data operations
 - **Vector Search**: Automatic text chunking and embedding with FAISS
+- **Hybrid Search**: Combines semantic (vector) and keyword (BM25) search for more comprehensive retrieval.
+- **Query Transformations (HyDE)**: Uses LLMs to generate hypothetical answers for improved semantic search relevance.
+- **Re-ranking with Cross-Encoders**: Applies a second-stage re-ranking model to refine search results and improve precision.
+- **Knowledge Graph Integration (Initial)**: Extracts entities and relationships from documents to build a knowledge graph, enabling basic graph-aware querying.
 - **Natural Language Queries**: RAG for unstructured documents
 - **Google Vertex AI**: Integration with Google's LLM and embedding models
 - **CLI Interface**: Command-line tool for easy document management

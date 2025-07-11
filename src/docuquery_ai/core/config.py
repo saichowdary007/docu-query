@@ -1,6 +1,6 @@
 import os
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # Google Cloud settings - Required for functionality, but optional for testing
-    GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "test-api-key")
-    GOOGLE_PROJECT_ID: str = os.getenv("GOOGLE_PROJECT_ID", "test-project-id")
+    GOOGLE_API_KEY: str
+    GOOGLE_PROJECT_ID: str
     GOOGLE_LOCATION: str = "us-central1"
 
     # For API Key Authentication - Required for functionality, but optional for testing
@@ -28,11 +28,11 @@ class Settings(BaseSettings):
     VECTOR_STORE_PATH: str = "vector_db_data/"
     TEMP_UPLOAD_FOLDER: str = "temp_uploads/"
 
-    model_config = {
-        "case_sensitive": True,
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-    }
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
 
 
 settings = Settings()

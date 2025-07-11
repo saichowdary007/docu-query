@@ -9,6 +9,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration
 from pydantic import BaseModel, Field
+from pydantic_settings import SettingsConfigDict
 
 from docuquery_ai.core.config import settings
 
@@ -30,7 +31,7 @@ class GeminiChatModel(BaseChatModel):
         """Return the type of LLM."""
         return "gemini"
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = SettingsConfigDict(arbitrary_types_allowed=True)
 
     def _generate(
         self,

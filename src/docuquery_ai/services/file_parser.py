@@ -11,6 +11,7 @@ from pptx import Presentation
 from pypdf import PdfReader
 
 from docuquery_ai.core.config import settings
+from docuquery_ai.services.graph_service import get_knowledge_graph
 
 # Ensure temp_uploads directory exists
 os.makedirs(settings.TEMP_UPLOAD_FOLDER, exist_ok=True)
@@ -197,5 +198,56 @@ def get_documents_from_file(file_path: str, filename: str) -> List[Document]:
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     texts = text_splitter.split_text(content)
 
-    documents = [Document(page_content=text, metadata=metadata) for text in texts]
+    documents = []
+    knowledge_graph = get_knowledge_graph()
+    for text in texts:
+        doc_metadata = deepcopy(metadata)
+        # Extract entities and relationships for potential graph integration
+        extracted_graph_info = extract_entities_and_relationships(text, knowledge_graph)
+        doc_metadata["graph_info"] = extracted_graph_info
+        documents.append(Document(page_content=text, metadata=doc_metadata))
+    save_knowledge_graph()
     return documents
+
+def extract_entities_and_relationships(text: str, knowledge_graph) -> Dict[str, Any]:
+    """
+    Extracts entities and relationships from text and adds them to the knowledge graph.
+    """
+    extracted_info = {"entities": [], "relationships": []}
+
+    # Simple keyword-based entity extraction for demonstration
+    # In a real scenario, this would use an LLM or advanced NLP library
+    entities = []
+    if "project" in text.lower():
+        entities.append(("project", "Concept"))
+    if "report" in text.lower():
+        entities.append(("report", "DocumentType"))
+    if "user" in text.lower():
+        entities.append(("user", "Person"))
+    if "data" in text.lower():
+        entities.append(("data", "Concept"))
+    if "file" in text.lower():
+        entities.append(("file", "Concept"))
+
+    for entity_name, entity_type in entities:
+        node_id = f"{entity_type.lower()}_{entity_name.lower()}"
+        knowledge_graph.add_node(node_id, entity_type, {"name": entity_name})
+        extracted_info["entities"].append({"id": node_id, "name": entity_name, "type": entity_type})
+
+    # Simple keyword-based relationship extraction for demonstration
+    # In a real scenario, this would use an LLM or advanced NLP library
+    if "project" in text.lower() and "report" in text.lower():
+        project_node_id = "concept_project"
+        report_node_id = "documenttype_report"
+        if knowledge_graph.get_node(project_node_id) and knowledge_graph.get_node(report_node_id):
+            knowledge_graph.add_edge(report_node_id, project_node_id, "MENTIONS_PROJECT")
+            extracted_info["relationships"].append({"source": report_node_id, "target": project_node_id, "type": "MENTIONS_PROJECT"})
+    
+    if "user" in text.lower() and "file" in text.lower():
+        user_node_id = "person_user"
+        file_node_id = "concept_file"
+        if knowledge_graph.get_node(user_node_id) and knowledge_graph.get_node(file_node_id):
+            knowledge_graph.add_edge(user_node_id, file_node_id, "UPLOADS")
+            extracted_info["relationships"].append({"source": user_node_id, "target": file_node_id, "type": "UPLOADS"})
+
+    return extracted_info
