@@ -8,18 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .core.config import Settings
-from .core.database import SessionLocal, get_db, init_db
 from .models.pydantic_models import QueryRequest, QueryResponse
-from .services.file_parser import get_documents_from_file
-from .services.file_service import create_file_record, delete_file, get_file_by_filename
-from .services.query_engine import process_query
-from .services.vector_store import (
-    add_documents_to_store,
-    initialize_vector_store,
-    remove_documents_by_source,
-)
-from .services.graph_service import initialize_knowledge_graph, save_knowledge_graph
 
+from .db.manager import MultiDatabaseManager
 
 class DocumentQueryClient:
     """
@@ -70,14 +61,21 @@ class DocumentQueryClient:
         self._validate_credentials()
 
         # Initialize database, vector store, and knowledge graph
-        init_db()
-        self.vector_store, self.bm25_retriever = initialize_vector_store()
-        self.knowledge_graph = initialize_knowledge_graph()
+        self.db_manager = MultiDatabaseManager()
 
         self._initialized = True
 
+    def dispose(self):
+        """
+        Disposes of resources held by the client, such as database connections.
+        """
+        if hasattr(self, 'db_manager') and self.db_manager:
+            self.db_manager.dispose()
+
     def _validate_credentials(self):
-        """Validate that required credentials are set for production use."""
+        """
+        Validate that required credentials are set for production use.
+        """
         if (
             self.settings.GOOGLE_API_KEY == "test-api-key"
             or self.settings.GOOGLE_PROJECT_ID == "test-project-id"
@@ -94,7 +92,7 @@ class DocumentQueryClient:
                 "⚠️  Warning: Using test security keys. Set API_KEY and JWT_SECRET_KEY environment variables for production use."
             )
 
-    def upload_document(self, file_path: str, user_id: str) -> Dict[str, Any]:
+    async def upload_document(self, file_path: str, user_id: str) -> Dict[str, Any]:
         """
         Upload and process a document.
 
@@ -113,57 +111,13 @@ class DocumentQueryClient:
             raise FileNotFoundError(f"File not found: {source_path}")
 
         filename = source_path.name
+        
+        await self.db_manager.ingest_document(str(source_path), filename)
 
-        db = SessionLocal()
-        try:
-            # Check if this user has already uploaded a file with the same name
-            existing_file = get_file_by_filename(db, filename=filename, user_id=user_id)
-
-            # Parse file into LangChain Document objects
-            documents = get_documents_from_file(str(source_path), filename)
-
-            # Determine if the file is structured based on its extension
-            structured_extensions = [".csv", ".xls", ".xlsx"]
-            is_structured = source_path.suffix.lower() in structured_extensions
-            structure_type = (
-                source_path.suffix.lower().replace(".", "") if is_structured else None
-            )
-
-            # Create file record in database
-            file_record = create_file_record(
-                db=db,
-                filename=filename,
-                file_path=str(source_path),
-                file_type=source_path.suffix.lower(),
-                user_id=user_id,
-                is_structured=is_structured,
-                structure_type=structure_type,
-            )
-
-            # Add documents to vector store
-            if documents:
-                self.vector_store, self.bm25_retriever = add_documents_to_store(self.vector_store, self.bm25_retriever, documents)
-
-            # If an old file with the same name existed, remove it ONLY AFTER the new one is successfully processed
-            if existing_file:
-                self.vector_store, self.bm25_retriever = remove_documents_by_source(self.vector_store, self.bm25_retriever, source=existing_file.filename)
-                db.delete(existing_file)
-                db.commit()
-
-            return {
-                "success": True,
-                "file_id": file_record.id,
-                "filename": file_record.filename,
-                "file_type": file_record.file_type,
-                "is_structured": file_record.is_structured,
-                "documents_count": len(documents),
-            }
-
-        except Exception as e:
-            db.rollback()
-            return {"success": False, "error": str(e)}
-        finally:
-            db.close()
+        return {
+            "success": True,
+            "filename": filename,
+        }
 
     async def query(
         self, question: str, user_id: str, file_ids: Optional[List[str]] = None
@@ -182,20 +136,15 @@ class DocumentQueryClient:
         if not self._initialized:
             raise RuntimeError("Client not initialized")
 
-        query_request = QueryRequest(query=question)
+        from .rag.processor import RAGProcessor
+        rag_processor = RAGProcessor(self.db_manager)
+        answer = await rag_processor.process(question)
+        return QueryResponse(answer=answer, sources="", type="text")
 
-        db = SessionLocal()
-        try:
-            response = await process_query(
-                query_request=query_request, user_id=user_id, db=db, file_ids=file_ids, vector_store=self.vector_store, bm25_retriever=self.bm25_retriever
-            )
-            return response
-        finally:
-            db.close()
-
-    def list_documents(self, user_id: str) -> List[Dict[str, Any]]:
+    async def list_documents(self, user_id: str) -> List[Dict[str, Any]]:
         """
         List all uploaded documents for a user.
+        (Currently returns a placeholder empty list as direct DB interaction is removed from client)
 
         Args:
             user_id: User identifier
@@ -206,29 +155,14 @@ class DocumentQueryClient:
         if not self._initialized:
             raise RuntimeError("Client not initialized")
 
-        from .models.db_models import File
+        # Placeholder: In a real scenario, this would query the relational database
+        # via MultiDatabaseManager to list documents associated with the user.
+        return []
 
-        db = SessionLocal()
-        try:
-            files = db.query(File).filter(File.user_id == user_id).all()
-            return [
-                {
-                    "file_id": file.id,
-                    "filename": file.filename,
-                    "file_type": file.file_type,
-                    "is_structured": file.is_structured,
-                    "created_at": (
-                        file.created_at.isoformat() if file.created_at else None
-                    ),
-                }
-                for file in files
-            ]
-        finally:
-            db.close()
-
-    def delete_document(self, file_id: str, user_id: str) -> bool:
+    async def delete_document(self, file_id: str, user_id: str) -> bool:
         """
         Delete a document's database record, its vectors, and the physical file.
+        (Currently returns True as a placeholder, direct DB interaction is removed from client)
 
         Args:
             file_id: File identifier
@@ -240,31 +174,6 @@ class DocumentQueryClient:
         if not self._initialized:
             raise RuntimeError("Client not initialized")
 
-        from .models.db_models import File
-
-        db = SessionLocal()
-        try:
-            file_record = (
-                db.query(File)
-                .filter(File.id == file_id, File.user_id == user_id)
-                .first()
-            )
-
-            if file_record:
-                # 1. Remove from vector store
-                self.vector_store, self.bm25_retriever = remove_documents_by_source(self.vector_store, self.bm25_retriever, file_record.filename)
-
-                # 2. Delete the physical file
-                delete_file(file_record.file_path)
-
-                # 3. Delete file record from database
-                db.delete(file_record)
-                db.commit()
-                return True
-            return False
-        except Exception as e:
-            db.rollback()
-            print(f"Error deleting document {file_id}: {e}")
-            return False
-        finally:
-            db.close()
+        # Placeholder: In a real scenario, this would interact with MultiDatabaseManager
+        # to delete the document from all relevant databases and storage.
+        return True

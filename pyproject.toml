@@ -65,6 +65,12 @@ dependencies = [
     "rank-bm25>=0.1.2",
     "sentence-transformers>=2.2.2",
     "networkx>=3.0",
+    "spacy>=3.7.0",
+    "psycopg2-binary>=2.9.9",
+    "neo4j>=5.17.0",
+    "pinecone-client>=3.2.2",
+    "weaviate-client>=4.5.4",
+    "chromadb>=0.4.24",
 ]
 
 [project.optional-dependencies]
@@ -146,6 +152,8 @@ allow_untyped_calls = true
 no_implicit_optional = false
 
 [tool.pytest.ini_options]
+pytest_plugins = ["pytest_asyncio"]
+asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
