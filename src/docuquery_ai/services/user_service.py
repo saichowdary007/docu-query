@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -13,6 +14,8 @@ from docuquery_ai.core.security import (
 )
 from docuquery_ai.models.db_models import User
 from docuquery_ai.models.user import UserCreate, UserResponse, UserRole, UserUpdate
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
@@ -57,11 +60,11 @@ def create_user(db: Session, user_data: UserCreate) -> User:
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
-        print(f"User created successfully: {db_user.id} - {db_user.email}")
+        logger.info("User created successfully: %s - %s", db_user.id, db_user.email)
         return db_user
-    except Exception as e:
+    except (ValueError, IOError) as e:
         db.rollback()
-        print(f"Error creating user: {str(e)}")
+        logger.error("Error creating user: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create user: {str(e)}",
@@ -90,7 +93,7 @@ def create_or_update_google_user(
 
             db.commit()
             db.refresh(existing_user)
-            print(f"Updated existing user with Google data: {existing_user.id}")
+            logger.info("Updated existing user with Google data: %s", existing_user.id)
             return existing_user
         else:
             # Create new user with Google info
@@ -108,11 +111,11 @@ def create_or_update_google_user(
             db.add(new_user)
             db.commit()
             db.refresh(new_user)
-            print(f"Created new user with Google data: {new_user.id}")
+            logger.info("Created new user with Google data: %s", new_user.id)
             return new_user
-    except Exception as e:
+    except (ValueError, IOError) as e:
         db.rollback()
-        print(f"Error creating/updating Google user: {str(e)}")
+        logger.error("Error creating/updating Google user: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create/update user with Google: {str(e)}",
@@ -150,12 +153,12 @@ def store_refresh_token(db: Session, user_id: str, refresh_token: str) -> None:
         if user:
             user.refresh_token = refresh_token
             db.commit()
-            print(f"Stored refresh token for user: {user_id}")
+            logger.info("Stored refresh token for user: %s", user_id)
         else:
-            print(f"Cannot store refresh token - user not found: {user_id}")
-    except Exception as e:
+            logger.warning("Cannot store refresh token - user not found: %s", user_id)
+    except (ValueError, IOError) as e:
         db.rollback()
-        print(f"Error storing refresh token: {str(e)}")
+        logger.error("Error storing refresh token: %s", str(e))
 
 
 def user_to_response(user: User) -> UserResponse:
@@ -200,7 +203,7 @@ def update_user(db: Session, user_id: str, user_data: UserUpdate) -> User:
         db.commit()
         db.refresh(user)
         return user
-    except Exception as e:
+    except (ValueError, IOError) as e:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -224,7 +227,7 @@ def delete_user(db: Session, user_id: str) -> None:
     try:
         db.delete(user)
         db.commit()
-    except Exception as e:
+    except (ValueError, IOError) as e:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

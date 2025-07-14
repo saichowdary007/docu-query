@@ -40,7 +40,7 @@ async def verify_google_token(id_token: str) -> Dict[str, Any]:
             raise GoogleAuthException("Token not issued for this application")
 
         return token_info
-    except Exception as e:
+    except (ValueError, IOError) as e:
         raise GoogleAuthException(f"Google token verification failed: {str(e)}")
 
 
@@ -69,7 +69,7 @@ async def exchange_code_for_token(code: str) -> Dict[str, Any]:
             )
 
         return response.json()
-    except Exception as e:
+    except (ValueError, IOError) as e:
         raise GoogleAuthException(f"Failed to exchange code: {str(e)}")
 
 
@@ -87,5 +87,5 @@ async def get_google_user_info(access_token: str) -> Dict[str, Any]:
             raise GoogleAuthException("Failed to fetch user info")
 
         return response.json()
-    except Exception as e:
+    except (ValueError, IOError) as e:
         raise GoogleAuthException(f"Failed to get user info: {str(e)}")

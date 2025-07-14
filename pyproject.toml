@@ -67,8 +67,6 @@ dependencies = [
     "networkx>=3.0",
     "spacy>=3.7.0",
     "psycopg2-binary>=2.9.9",
-    "neo4j>=5.17.0",
-    "pinecone-client>=3.2.2",
     "weaviate-client>=4.5.4",
     "chromadb>=0.4.24",
 ]
@@ -83,6 +81,8 @@ dev = [
     "flake8>=6.0.0",
     "mypy==1.6.1",
     "pre-commit>=3.0.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
     "types-requests>=2.31.0.20240417",
     "types-Markdown>=3.5.0.20240215",
 ]
@@ -96,6 +96,12 @@ cpu = [
 ]
 gpu = [
     "faiss-gpu>=1.7.4",
+]
+pinecone = [
+    "pinecone-client>=3.2.2",
+]
+graph = [
+    "neo4j>=5.17.0",
 ]
 
 [project.urls]

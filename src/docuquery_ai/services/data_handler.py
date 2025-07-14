@@ -1,3 +1,4 @@
+import logging
 import os
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Union
@@ -7,6 +8,8 @@ import pandas as pd
 from cachetools import LRUCache
 
 from docuquery_ai.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Cache for loaded dataframes with LRU eviction policy
 # Max size set to 128 to prevent unbounded memory growth
@@ -40,7 +43,9 @@ def load_structured_file(
 
     if not os.path.exists(file_path):
         # This indicates a potential issue: file summary in vector DB, but original gone.
-        print(f"Warning: File {filename} not found at {file_path} for direct querying.")
+        logger.warning(
+            "File %s not found at %s for direct querying.", filename, file_path
+        )
         return None
 
     _, ext = os.path.splitext(filename.lower())
@@ -50,8 +55,8 @@ def load_structured_file(
             data = pd.read_csv(file_path)
         elif ext in [".xls", ".xlsx"]:
             data = pd.read_excel(file_path, sheet_name=None)  # Load all sheets
-    except Exception as e:
-        print(f"Error loading file {filename}: {str(e)}")
+    except (ValueError, IOError) as e:
+        logger.error("Error loading file %s: %s", filename, str(e))
         return None
 
     if data is not None:
@@ -190,9 +195,13 @@ def execute_filtered_query(
     Special cases:
     - If query_params is an empty list [], returns all records without filtering
     """
-    print(
-        f"execute_filtered_query called with: filename={filename}, query_params={query_params}, "
-        f"sheet_name={sheet_name}, drop_duplicates={drop_duplicates}, subset={subset}"
+    logger.info(
+        "execute_filtered_query called with: filename=%s, query_params=%s, sheet_name=%s, drop_duplicates=%s, subset=%s",
+        filename,
+        query_params,
+        sheet_name,
+        drop_duplicates,
+        subset,
     )
 
     # If source_filename is provided, use it for cache key, otherwise extract from path
@@ -200,7 +209,7 @@ def execute_filtered_query(
 
     data = load_structured_file(filename, cache_key)
     if data is None:
-        print(f"Error: File {filename} not found or could not be loaded")
+        logger.error("Error: File %s not found or could not be loaded", filename)
         raise ValueError("File not found or not loaded for querying.")
 
     # Determine if this is a CSV file
@@ -251,13 +260,15 @@ def execute_filtered_query(
                 count = count_matching_rows(filename, col, val, sheet_name)
                 # Create a simple DataFrame with the count to return
                 return pd.DataFrame({"Count": [count]})
-            except Exception as e:
-                print(f"Error in count_matching_rows: {str(e)}")
+            except (ValueError, IOError) as e:
+                logger.error("Error in count_matching_rows: %s", str(e))
                 # Fall back to normal filtering below
 
     # Handle empty query_params list - return all records without filtering
     if isinstance(query_params, list) and len(query_params) == 0:
-        print(f"No query parameters provided. Returning all records from {filename}")
+        logger.info(
+            "No query parameters provided. Returning all records from %s", filename
+        )
 
         # Handle duplicates if requested
         if drop_duplicates:
@@ -295,8 +306,10 @@ def execute_filtered_query(
                         df_to_query = filter_dataframe(
                             df_to_query, col, op, val, is_csv
                         )
-                    except Exception as e:
-                        print(f"Error filtering on {col} {op} {val}: {str(e)}")
+                    except (ValueError, IOError) as e:
+                        logger.error(
+                            "Error filtering on %s %s %s: %s", col, op, val, str(e)
+                        )
                         raise ValueError(
                             f"Error filtering on {col} {op} {val}: {str(e)}"
                         )
@@ -325,8 +338,10 @@ def execute_filtered_query(
                 # Apply filter
                 try:
                     df_to_query = filter_dataframe(df_to_query, col, op, val, is_csv)
-                except Exception as e:
-                    print(f"Error filtering on {col} {op} {val}: {str(e)}")
+                except (ValueError, IOError) as e:
+                    logger.error(
+                        "Error filtering on %s %s %s: %s", col, op, val, str(e)
+                    )
                     raise ValueError(f"Error filtering on {col} {op} {val}: {str(e)}")
 
         # Special case for count-only queries with multiple conditions
@@ -337,8 +352,8 @@ def execute_filtered_query(
                 df_to_query = df_to_query.drop_duplicates(subset=subset)
             return pd.DataFrame({"Count": [len(df_to_query)]})
 
-    except Exception as e:
-        print(f"Error during query execution: {str(e)}")
+    except (ValueError, IOError) as e:
+        logger.error("Error during query execution: %s", str(e))
         raise
 
     # Handle duplicates if requested

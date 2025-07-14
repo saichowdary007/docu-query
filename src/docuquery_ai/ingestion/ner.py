@@ -1,15 +1,18 @@
+from typing import Any, Dict, List
+
 import spacy
-from typing import List, Dict, Any
+
 
 class NER:
     """
     Performs Named Entity Recognition (NER) on text using a spaCy model.
     """
+
     def __init__(self):
         """
         Initializes the NER component by loading the 'en_core_web_sm' spaCy model.
         """
-        self.nlp = spacy.load('en_core_web_sm')
+        self.nlp = spacy.load("en_core_web_sm")
 
     async def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -26,10 +29,12 @@ class NER:
         doc = self.nlp(text)
         entities = []
         for ent in doc.ents:
-            entities.append({
-                'text': ent.text,
-                'start_char': ent.start_char,
-                'end_char': ent.end_char,
-                'label': ent.label_
-            })
+            entities.append(
+                {
+                    "text": ent.text,
+                    "start_char": ent.start_char,
+                    "end_char": ent.end_char,
+                    "label": ent.label_,
+                }
+            )
         return entities

@@ -1,7 +1,10 @@
+import logging
 import sqlite3
 
 from sqlalchemy import create_engine, exc, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 from docuquery_ai.core.config import settings
 
@@ -30,7 +33,7 @@ def init_db():
     try:
         # Use checkfirst=True to prevent "table already exists" errors.
         Base.metadata.create_all(bind=engine, checkfirst=True)
-        print(
+        logger.info(
             "Database tables checked/initialized successfully using create_all(checkfirst=True)."
         )
 
@@ -49,17 +52,24 @@ def init_db():
             "table" in orig_error_message_lower
             and "already exist" in orig_error_message_lower
         ):
-            print(
-                f"Tables already exist (OperationalError caught, treated as benign due to checkfirst=True): {op_err}"
+            logger.info(
+                "Tables already exist (OperationalError caught, treated as benign due to checkfirst=True): %s",
+                op_err,
             )
         else:
             # Any other OperationalError should be raised.
-            print(
-                f"A non-'already exists' OperationalError occurred during DB initialization: {op_err}"
+            logger.error(
+                "A non-'already exists' OperationalError occurred during DB initialization: %s",
+                op_err,
             )
             raise
-    except Exception as e:  # Catch any other type of exception during DB init
-        print(f"An unexpected error occurred during DB initialization: {str(e)}")
+    except (
+        ValueError,
+        IOError,
+    ) as exc:  # Catch any other type of exception during DB init
+        logger.error(
+            "An unexpected error occurred during DB initialization: %s", str(exc)
+        )
         raise
 
 

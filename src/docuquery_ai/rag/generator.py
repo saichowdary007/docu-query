@@ -1,11 +1,14 @@
-from ..services.nlp_service import get_llm
 from langchain_core.messages import HumanMessage
+
+from ..services.nlp_service import get_llm
+
 
 class ResponseGenerator:
     """
     Generates a natural language response based on a query and provided context
     using a large language model.
     """
+
     def __init__(self):
         """
         Initializes the ResponseGenerator with a language model.

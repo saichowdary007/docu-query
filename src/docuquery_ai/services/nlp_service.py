@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -12,6 +13,8 @@ from pydantic import BaseModel, Field
 from pydantic_settings import SettingsConfigDict
 
 from docuquery_ai.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ChatResult(BaseModel):
@@ -106,9 +109,9 @@ class GeminiChatModel(BaseChatModel):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"API request error: {e}")
+            logger.error("API request error: %s", e)
             if hasattr(e, "response") and e.response is not None:
-                print(f"Response content: {e.response.text}")
+                logger.error("Response content: %s", e.response.text)
             raise
 
     def _create_chat_result(self, response: Dict[str, Any]) -> ChatResult:
@@ -117,7 +120,7 @@ class GeminiChatModel(BaseChatModel):
             generation = ChatGeneration(message=AIMessage(content=text))
             return ChatResult(generations=[generation])
         except (KeyError, IndexError) as e:
-            print(f"Failed to parse Gemini API response: {response}")
+            logger.error("Failed to parse Gemini API response: %s", response)
             raise ValueError(f"Failed to parse Gemini API response: {e}")
 
     async def _agenerate(
@@ -159,8 +162,8 @@ def get_embeddings_model() -> Embeddings:
         settings.GOOGLE_API_KEY == "test-api-key"
         or settings.GOOGLE_PROJECT_ID == "test-project-id"
     ):
-        print(
-            "⚠️  Using mock embeddings model for testing. Set real Google credentials for production."
+        logger.warning(
+            "Using mock embeddings model for testing. Set real Google credentials for production."
         )
         return MockEmbeddings()
 
@@ -172,9 +175,9 @@ def get_embeddings_model() -> Embeddings:
         # GOOGLE_APPLICATION_CREDENTIALS or gcloud auth to be configured.
         # The project_id is automatically picked up from the environment.
         return VertexAIEmbeddings(model_name="textembedding-gecko@latest")
-    except Exception as e:
-        print(f"⚠️  Failed to initialize Vertex AI embeddings: {e}")
-        print("⚠️  Falling back to mock embeddings model.")
+    except (ValueError, IOError) as e:
+        logger.warning("Failed to initialize Vertex AI embeddings: %s", e)
+        logger.warning("Falling back to mock embeddings model.")
         return MockEmbeddings()
 
 

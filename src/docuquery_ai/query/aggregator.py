@@ -1,9 +1,11 @@
-from typing import List, Any
+from typing import Any, List
+
 
 class ResultAggregator:
     """
     Aggregates and ranks search results from various database sources.
     """
+
     def aggregate(self, results: List[List[Any]]) -> List[Any]:
         """
         Aggregates a list of lists of results into a single flattened list.

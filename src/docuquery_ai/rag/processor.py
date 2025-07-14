@@ -1,13 +1,15 @@
-from .retriever import Retriever
+from ..db.manager import MultiDatabaseManager
 from .context import ContextAssembler
 from .generator import ResponseGenerator
-from ..db.manager import MultiDatabaseManager
+from .retriever import Retriever
+
 
 class RAGProcessor:
     """
     Orchestrates the Retrieval-Augmented Generation (RAG) process.
     It retrieves relevant information, assembles context, and generates a response.
     """
+
     def __init__(self, db_manager: MultiDatabaseManager):
         """
         Initializes the RAGProcessor with a MultiDatabaseManager instance.

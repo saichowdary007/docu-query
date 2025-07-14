@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .core.config import Settings
+from .db.manager import MultiDatabaseManager
 from .models.pydantic_models import QueryRequest, QueryResponse
 
-from .db.manager import MultiDatabaseManager
 
 class DocumentQueryClient:
     """
@@ -69,27 +69,21 @@ class DocumentQueryClient:
         """
         Disposes of resources held by the client, such as database connections.
         """
-        if hasattr(self, 'db_manager') and self.db_manager:
+        if hasattr(self, "db_manager") and self.db_manager:
             self.db_manager.dispose()
 
     def _validate_credentials(self):
         """
         Validate that required credentials are set for production use.
         """
-        if (
-            self.settings.GOOGLE_API_KEY == "test-api-key"
-            or self.settings.GOOGLE_PROJECT_ID == "test-project-id"
-        ):
-            print(
-                "⚠️  Warning: Using test credentials. Set GOOGLE_API_KEY and GOOGLE_PROJECT_ID environment variables for production use."
+        if not self.settings.GOOGLE_API_KEY or not self.settings.GOOGLE_PROJECT_ID:
+            raise EnvironmentError(
+                "GOOGLE_API_KEY and GOOGLE_PROJECT_ID must be set in the environment"
             )
 
-        if (
-            self.settings.API_KEY == "test-security-key"
-            or self.settings.JWT_SECRET_KEY == "test-jwt-secret-key"
-        ):
-            print(
-                "⚠️  Warning: Using test security keys. Set API_KEY and JWT_SECRET_KEY environment variables for production use."
+        if not self.settings.API_KEY or not self.settings.JWT_SECRET_KEY:
+            raise EnvironmentError(
+                "API_KEY and JWT_SECRET_KEY must be set in the environment"
             )
 
     async def upload_document(self, file_path: str, user_id: str) -> Dict[str, Any]:
@@ -111,7 +105,7 @@ class DocumentQueryClient:
             raise FileNotFoundError(f"File not found: {source_path}")
 
         filename = source_path.name
-        
+
         await self.db_manager.ingest_document(str(source_path), filename)
 
         return {
@@ -137,6 +131,7 @@ class DocumentQueryClient:
             raise RuntimeError("Client not initialized")
 
         from .rag.processor import RAGProcessor
+
         rag_processor = RAGProcessor(self.db_manager)
         answer = await rag_processor.process(question)
         return QueryResponse(answer=answer, sources="", type="text")
@@ -157,7 +152,7 @@ class DocumentQueryClient:
 
         # Placeholder: In a real scenario, this would query the relational database
         # via MultiDatabaseManager to list documents associated with the user.
-        return []
+        raise NotImplementedError("list_documents is not implemented yet")
 
     async def delete_document(self, file_id: str, user_id: str) -> bool:
         """
@@ -176,4 +171,4 @@ class DocumentQueryClient:
 
         # Placeholder: In a real scenario, this would interact with MultiDatabaseManager
         # to delete the document from all relevant databases and storage.
-        return True
+        raise NotImplementedError("delete_document is not implemented yet")

@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 from typing import Dict, List, Optional
 
@@ -8,6 +9,8 @@ from docuquery_ai.core.config import settings
 from docuquery_ai.core.database import SessionLocal
 from docuquery_ai.models.db_models import File, User
 from docuquery_ai.services.file_service import create_file_record
+
+logger = logging.getLogger(__name__)
 
 
 def migrate_existing_files():
@@ -20,7 +23,7 @@ def migrate_existing_files():
             # Get any user if no admin exists
             admin_user = db.query(User).first()
             if not admin_user:
-                print("No users found in the database. Cannot migrate files.")
+                logger.warning("No users found in the database. Cannot migrate files.")
                 return
 
         # Scan main temp_uploads directory
@@ -40,10 +43,10 @@ def migrate_existing_files():
                     scan_directory(user_dir, admin_user.id, db)
 
         db.commit()
-        print(f"File migration completed successfully.")
-    except Exception as e:
+        logger.info("File migration completed successfully.")
+    except (ValueError, IOError) as exc:
         db.rollback()
-        print(f"Error during file migration: {str(e)}")
+        logger.error("Error during file migration: %s", str(exc))
     finally:
         db.close()
 
@@ -85,13 +88,15 @@ def scan_directory(directory: str, user_id: str, db: Session):
                     is_structured=is_structured,
                     structure_type=structure_type,
                 )
-                print(f"Migrated file: {filename} for user {user_id}")
+                logger.info("Migrated file: %s for user %s", filename, user_id)
             else:
-                print(f"File already has a record: {filename} for user {user_id}")
+                logger.info(
+                    "File already has a record: %s for user %s", filename, user_id
+                )
 
 
 def run_migrations():
     """Run all database migrations."""
-    print("Starting database migrations...")
+    logger.info("Starting database migrations...")
     migrate_existing_files()
-    print("Migrations complete.")
+    logger.info("Migrations complete.")

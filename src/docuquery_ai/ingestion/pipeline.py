@@ -1,19 +1,23 @@
 import logging
 import os
 from typing import List
-from .parser import parse_docx, parse_pptx, parse_pdf, parse_md, parse_csv, parse_excel
+
+from docuquery_ai.exceptions import IngestionError, UnsupportedFileType
+
+from ..db.models import Document
 from .embedding import EmbeddingGenerator
 from .ner import NER
-from ..db.models import Document
-from docuquery_ai.exceptions import UnsupportedFileType, IngestionError
+from .parser import parse_csv, parse_docx, parse_excel, parse_md, parse_pdf, parse_pptx
 
 logger = logging.getLogger(__name__)
+
 
 class IngestionPipeline:
     """
     Orchestrates the document ingestion process, including parsing, embedding generation,
     and named entity recognition.
     """
+
     def __init__(self):
         """
         Initializes the IngestionPipeline with an EmbeddingGenerator and NER component.
@@ -54,7 +58,7 @@ class IngestionPipeline:
                     content = f.read()
             elif ext == ".csv":
                 df = parse_csv(file_path)
-                content = df.to_string() # Convert DataFrame to string for embedding
+                content = df.to_string()  # Convert DataFrame to string for embedding
                 metadata["is_structured"] = True
                 metadata["structure_type"] = "csv"
             elif ext in [".xls", ".xlsx"]:
@@ -81,10 +85,10 @@ class IngestionPipeline:
                 embeddings=embeddings,
                 entities=entities,
                 relationships=[],
-                knowledge_triples=[]
+                knowledge_triples=[],
             )
         except UnsupportedFileType:
-            raise # Re-raise the specific exception
-        except Exception as e:
-            logger.error(f"Error processing file {filename}: {e}", exc_info=True)
-            raise IngestionError(f"Failed to process file {filename}: {e}") from e
+            raise  # Re-raise the specific exception
+        except (ValueError, IOError) as exc:
+            logger.error("Error processing file %s: %s", filename, exc, exc_info=True)
+            raise IngestionError(f"Failed to process file {filename}: {exc}") from exc
