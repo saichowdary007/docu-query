@@ -1,9 +1,4 @@
-try:
-    from sentence_transformers import SentenceTransformer
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency missing
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
-    SentenceTransformer = None  # type: ignore
+from sentence_transformers import SentenceTransformer
 from typing import List
 
 class EmbeddingGenerator:
@@ -17,13 +12,7 @@ class EmbeddingGenerator:
         Args:
             model_name: The name of the SentenceTransformer model to use.
         """
-        if SENTENCE_TRANSFORMERS_AVAILABLE:
-            try:
-                self.model = SentenceTransformer(model_name)
-            except Exception:  # pragma: no cover - model download failure
-                self.model = None
-        else:  # pragma: no cover - fall back in tests
-            self.model = None
+        self.model = SentenceTransformer(model_name)
 
     async def generate_embeddings(self, text: str) -> List[float]:
         """
@@ -35,8 +24,5 @@ class EmbeddingGenerator:
         Returns:
             A list of floats representing the embedding vector.
         """
-        if self.model is None:
-            # Fallback deterministic embedding for tests
-            return [0.0]
         # In a real async scenario, this might use a non-blocking model or run in a thread pool
         return self.model.encode(text).tolist()
