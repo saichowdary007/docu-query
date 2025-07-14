@@ -1,35 +1,33 @@
-import spacy
+try:
+    import spacy
+    SPACY_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency missing
+    SPACY_AVAILABLE = False
+    spacy = None  # type: ignore
 from typing import List, Dict, Any
 
 class NER:
-    """
-    Performs Named Entity Recognition (NER) on text using a spaCy model.
-    """
+    """Perform simple Named Entity Recognition using spaCy if available."""
+
     def __init__(self):
-        """
-        Initializes the NER component by loading the 'en_core_web_sm' spaCy model.
-        """
-        self.nlp = spacy.load('en_core_web_sm')
+        if SPACY_AVAILABLE:
+            try:
+                self.nlp = spacy.load('en_core_web_sm')
+            except Exception:
+                self.nlp = spacy.blank('en')
+        else:  # pragma: no cover - fallback when spaCy is unavailable
+            self.nlp = None
 
     async def extract_entities(self, text: str) -> List[Dict[str, Any]]:
-        """
-        Extracts named entities from the given text.
-
-        Args:
-            text: The input text string.
-
-        Returns:
-            A list of dictionaries, where each dictionary represents an extracted entity
-            with its text, start and end characters, and label.
-        """
-        # In a real async scenario, this might use a non-blocking model or run in a thread pool
+        if self.nlp is None:
+            return []
         doc = self.nlp(text)
-        entities = []
-        for ent in doc.ents:
-            entities.append({
+        return [
+            {
                 'text': ent.text,
                 'start_char': ent.start_char,
                 'end_char': ent.end_char,
-                'label': ent.label_
-            })
-        return entities
+                'label': ent.label_,
+            }
+            for ent in doc.ents
+        ]
