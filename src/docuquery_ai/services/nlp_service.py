@@ -1,73 +1,13 @@
 import json
 from typing import Any, Dict, List, Optional
 
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency missing
-    NUMPY_AVAILABLE = False
-    import random as _random
-
-    class _RandomState:
-        def __init__(self, seed: int):
-            self._rand = _random.Random(seed)
-
-        def normal(self, loc: float, scale: float, size: int):
-            return [self._rand.gauss(loc, scale) for _ in range(size)]
-
-    class np:  # type: ignore
-        RandomState = _RandomState
-try:
-    import requests
-    REQUESTS_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency missing
-    REQUESTS_AVAILABLE = False
-    class requests:  # type: ignore
-        class exceptions:
-            class RequestException(Exception):
-                pass
-
-        @staticmethod
-        def post(*args, **kwargs):
-            raise RuntimeError("requests library is required")
-try:
-    from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-    from langchain_core.embeddings import Embeddings
-    from langchain_core.language_models.chat_models import BaseChatModel
-    from langchain_core.messages import (
-        AIMessage,
-        BaseMessage,
-        HumanMessage,
-        SystemMessage,
-    )
-    from langchain_core.outputs import ChatGeneration
-    LANGCHAIN_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency missing
-    LANGCHAIN_AVAILABLE = False
-    CallbackManagerForLLMRun = None  # type: ignore
-
-    class Embeddings:
-        pass
-
-    class BaseChatModel:
-        pass
-
-    class BaseMessage:  # type: ignore
-        def __init__(self, content: str = ""):
-            self.content = content
-
-    class AIMessage(BaseMessage):
-        pass
-
-    class HumanMessage(BaseMessage):
-        pass
-
-    class SystemMessage(BaseMessage):
-        pass
-
-    class ChatGeneration:
-        def __init__(self, message: BaseMessage):
-            self.message = message
+import numpy as np
+import requests
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatGeneration
 from pydantic import BaseModel, Field
 from pydantic_settings import SettingsConfigDict
 

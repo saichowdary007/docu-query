@@ -3,12 +3,7 @@ import shutil
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-try:
-    from sqlalchemy.orm import Session
-    SQLALCHEMY_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency missing
-    SQLALCHEMY_AVAILABLE = False
-    Session = None  # type: ignore
+from sqlalchemy.orm import Session
 
 from docuquery_ai.core.config import settings
 from docuquery_ai.models.db_models import File, User
@@ -24,8 +19,6 @@ def create_file_record(
     structure_type: Optional[str] = None,
 ) -> File:
     """Create a file record in the database."""
-    if not SQLALCHEMY_AVAILABLE:
-        raise RuntimeError("SQLAlchemy is required for database operations")
     file_record = File(
         filename=filename,
         file_path=file_path,
@@ -43,15 +36,11 @@ def create_file_record(
 
 def get_user_files(db: Session, user_id: str) -> List[File]:
     """Get all files for a specific user."""
-    if not SQLALCHEMY_AVAILABLE:
-        raise RuntimeError("SQLAlchemy is required for database operations")
     return db.query(File).filter(File.user_id == user_id).all()
 
 
 def get_file_by_filename(db: Session, filename: str, user_id: str) -> Optional[File]:
     """Get a file by its filename and user_id."""
-    if not SQLALCHEMY_AVAILABLE:
-        raise RuntimeError("SQLAlchemy is required for database operations")
     return (
         db.query(File)
         .filter(File.filename == filename, File.user_id == user_id)
@@ -61,8 +50,6 @@ def get_file_by_filename(db: Session, filename: str, user_id: str) -> Optional[F
 
 def delete_file_record(db: Session, file_id: str) -> bool:
     """Delete a file record from the database."""
-    if not SQLALCHEMY_AVAILABLE:
-        raise RuntimeError("SQLAlchemy is required for database operations")
     file = db.query(File).filter(File.id == file_id).first()
     if not file:
         return False

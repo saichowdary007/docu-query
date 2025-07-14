@@ -2,21 +2,11 @@ import csv
 import os
 from typing import Any, Dict, List
 
-try:
-    import markdown  # type: ignore
-    MARKDOWN_AVAILABLE = True
-except Exception:  # pragma: no cover
-    MARKDOWN_AVAILABLE = False
-
-try:
-    import pandas as pd
-    PANDAS_AVAILABLE = True
-except Exception:  # pragma: no cover - pandas is optional in tests
-    PANDAS_AVAILABLE = False
-    pd = None  # type: ignore
-DocxDocument = None
-Presentation = None
-PdfReader = None
+import markdown
+import pandas as pd
+from docx import Document as DocxDocument
+from pptx import Presentation
+from pypdf import PdfReader
 
 from docuquery_ai.core.config import settings
 
@@ -33,12 +23,6 @@ def parse_docx(file_path: str) -> str:
     Returns:
         The extracted text content as a string.
     """
-    global DocxDocument
-    if DocxDocument is None:
-        try:
-            from docx import Document as DocxDocument
-        except Exception as e:  # pragma: no cover - optional dependency missing
-            raise RuntimeError("docx module is required to parse DOCX files") from e
     doc = DocxDocument(file_path)
     return "\n".join([para.text for para in doc.paragraphs])
 
@@ -53,12 +37,6 @@ def parse_pptx(file_path: str) -> str:
     Returns:
         The extracted text content as a string.
     """
-    global Presentation
-    if Presentation is None:
-        try:
-            from pptx import Presentation
-        except Exception as e:  # pragma: no cover - optional dependency missing
-            raise RuntimeError("python-pptx is required to parse PPTX files") from e
     prs = Presentation(file_path)
     text_runs = []
     for slide in prs.slides:
@@ -83,12 +61,6 @@ def parse_pdf(file_path: str) -> str:
     """
     try:
         # First try the standard method
-        global PdfReader
-        if PdfReader is None:
-            try:
-                from pypdf import PdfReader
-            except Exception as e:  # pragma: no cover - optional dependency missing
-                raise RuntimeError("pypdf is required to parse PDF files") from e
         reader = PdfReader(file_path)
 
         # Check if the PDF is encrypted
@@ -135,7 +107,7 @@ def parse_pdf(file_path: str) -> str:
         return f"[Error processing PDF document: {os.path.basename(file_path)}. Error: {str(e)}]"
 
 
-def parse_csv(file_path: str) -> "pd.DataFrame":
+def parse_csv(file_path: str) -> pd.DataFrame:
     """
     Parses a CSV file into a pandas DataFrame.
 
@@ -145,13 +117,11 @@ def parse_csv(file_path: str) -> "pd.DataFrame":
     Returns:
         A pandas DataFrame containing the CSV data.
     """
-    if not PANDAS_AVAILABLE:
-        raise RuntimeError("pandas is required to parse CSV files")
     # For RAG, we might convert CSV rows to text or handle structured queries separately
     return pd.read_csv(file_path)
 
 
-def parse_excel(file_path: str) -> Dict[str, "pd.DataFrame"]:
+def parse_excel(file_path: str) -> Dict[str, pd.DataFrame]:
     """
     Parses an Excel file into a dictionary of pandas DataFrames, where keys are sheet names.
 
@@ -161,8 +131,6 @@ def parse_excel(file_path: str) -> Dict[str, "pd.DataFrame"]:
     Returns:
         A dictionary where keys are sheet names and values are pandas DataFrames.
     """
-    if not PANDAS_AVAILABLE:
-        raise RuntimeError("pandas is required to parse Excel files")
     # Returns a dictionary of sheet_name: dataframe
     return pd.read_excel(file_path, sheet_name=None)
 
@@ -178,7 +146,4 @@ def parse_md(file_path: str) -> str:
         The HTML content as a string.
     """
     with open(file_path, "r", encoding="utf-8") as f:
-        text = f.read()
-        if MARKDOWN_AVAILABLE:
-            return markdown.markdown(text)
-        return text
+        return markdown.markdown(f.read())

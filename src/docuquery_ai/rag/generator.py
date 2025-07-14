@@ -1,10 +1,5 @@
 from ..services.nlp_service import get_llm
-try:
-    from langchain_core.messages import HumanMessage
-except Exception:  # pragma: no cover - optional dependency missing
-    class HumanMessage:
-        def __init__(self, content: str):
-            self.content = content
+from langchain_core.messages import HumanMessage
 
 class ResponseGenerator:
     """
