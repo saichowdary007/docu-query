@@ -3,6 +3,7 @@ Command-line interface for DocuQuery AI.
 """
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,12 @@ from typing import Optional
 import click
 
 from docuquery_ai import DocumentQueryClient, __version__
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -77,8 +84,8 @@ def upload(ctx, file_path, user_id, output):
                 click.echo(f"❌ Upload failed: {result['error']}", err=True)
                 sys.exit(1)
 
-    except Exception as e:
-        click.echo(f"❌ Error: {str(e)}", err=True)
+    except (ValueError, IOError) as exc:
+        click.echo(f"❌ Error: {str(exc)}", err=True)
         sys.exit(1)
 
 
@@ -122,8 +129,8 @@ def query(ctx, question, user_id, file_ids, output):
             if result.download_url:
                 click.echo(f"💾 Download: {result.download_url}")
 
-    except Exception as e:
-        click.echo(f"❌ Error: {str(e)}", err=True)
+    except (ValueError, IOError) as exc:
+        click.echo(f"❌ Error: {str(exc)}", err=True)
         sys.exit(1)
 
 
@@ -161,8 +168,8 @@ def list(ctx, user_id, output):
                     if doc["created_at"]:
                         click.echo(f"     Created: {doc['created_at']}")
 
-    except Exception as e:
-        click.echo(f"❌ Error: {str(e)}", err=True)
+    except (ValueError, IOError) as exc:
+        click.echo(f"❌ Error: {str(exc)}", err=True)
         sys.exit(1)
 
 
@@ -187,8 +194,8 @@ def delete(ctx, file_id, user_id):
             click.echo(f"❌ Document not found: {file_id}", err=True)
             sys.exit(1)
 
-    except Exception as e:
-        click.echo(f"❌ Error: {str(e)}", err=True)
+    except (ValueError, IOError) as exc:
+        click.echo(f"❌ Error: {str(exc)}", err=True)
         sys.exit(1)
 
 
@@ -223,8 +230,8 @@ def init(ctx):
             )
             click.echo("✅ DocuQuery AI initialized successfully!")
             click.echo(f"   Vector store: {ctx.obj['vector_store_path']}")
-        except Exception as e:
-            click.echo(f"❌ Initialization failed: {str(e)}", err=True)
+        except (ValueError, IOError) as exc:
+            click.echo(f"❌ Initialization failed: {str(exc)}", err=True)
             sys.exit(1)
 
 

@@ -13,6 +13,7 @@ from docuquery_ai.core.config import settings
 # Ensure temp_uploads directory exists
 os.makedirs(settings.TEMP_UPLOAD_FOLDER, exist_ok=True)
 
+
 def parse_docx(file_path: str) -> str:
     """
     Parses a DOCX file and extracts its text content.
@@ -68,9 +69,12 @@ def parse_pdf(file_path: str) -> str:
             try:
                 # Try with empty password (some PDFs can be accessed this way)
                 reader.decrypt("")
-                print(f"Successfully decrypted PDF with empty password: {file_path}")
-            except Exception as e:
-                print(f"Cannot decrypt PDF {file_path}: {str(e)}")
+                logger.warning(
+                    "Successfully decrypted PDF with empty password: %s",
+                    file_path,
+                )
+            except (ValueError, IOError) as exc:
+                logger.warning("Cannot decrypt PDF %s: %s", file_path, str(exc))
                 return f"[This PDF is encrypted and could not be processed: {os.path.basename(file_path)}]"
 
         # Extract text from each page with better error handling
@@ -81,19 +85,24 @@ def parse_pdf(file_path: str) -> str:
                 text += page_text
                 # If page is empty, add a note
                 if not page_text.strip():
-                    print(
-                        f"Warning: Empty or non-text content on page {i+1} in {file_path}"
+                    logger.warning(
+                        "Empty or non-text content on page %s in %s",
+                        i + 1,
+                        file_path,
                     )
-            except Exception as page_e:
-                print(
-                    f"Error extracting text from page {i+1} in {file_path}: {str(page_e)}"
+            except (ValueError, IOError) as page_e:
+                logger.warning(
+                    "Error extracting text from page %s in %s: %s",
+                    i + 1,
+                    file_path,
+                    str(page_e),
                 )
                 text += f"\n[Error extracting text from page {i+1}]\n"
 
         # If we got no text at all, try a fallback method
         if not text.strip():
-            print(
-                f"Warning: No text extracted from {file_path}. Attempting fallback method."
+            logger.warning(
+                "No text extracted from %s. Attempting fallback method.", file_path
             )
             # We could implement alternative extraction here if needed
             # e.g., using a different library or OCR for scanned PDFs
@@ -101,8 +110,8 @@ def parse_pdf(file_path: str) -> str:
 
         return text
 
-    except Exception as e:
-        print(f"Error parsing PDF {file_path}: {str(e)}")
+    except (ValueError, IOError) as e:
+        logger.error("Error parsing PDF %s: %s", file_path, str(e))
         # Return a placeholder so the document's not completely lost
         return f"[Error processing PDF document: {os.path.basename(file_path)}. Error: {str(e)}]"
 

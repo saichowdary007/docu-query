@@ -1,11 +1,14 @@
+from typing import Any, List
+
 from ..db.manager import MultiDatabaseManager
 from ..db.models import HybridQuery
-from typing import List, Any
+
 
 class Retriever:
     """
     Retrieves relevant information from the MultiDatabaseManager based on a query.
     """
+
     def __init__(self, db_manager: MultiDatabaseManager):
         """
         Initializes the Retriever with a MultiDatabaseManager instance.

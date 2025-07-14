@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -7,6 +8,8 @@ from docuquery_ai.core.database import get_db
 from docuquery_ai.core.security import get_password_hash
 from docuquery_ai.models.db_models import User
 from docuquery_ai.models.user import UserRole
+
+logger = logging.getLogger(__name__)
 
 
 def seed_admin_user():
@@ -21,7 +24,7 @@ def seed_admin_user():
     user_count = db.query(User).count()
 
     if user_count > 0:
-        print("Users already exist in database. Skipping admin user creation.")
+        logger.info("Users already exist in database. Skipping admin user creation.")
         return
 
     # Get admin credentials from environment variables or use defaults
@@ -50,10 +53,11 @@ def seed_admin_user():
         db.add(admin_user)
         db.commit()
         db.refresh(admin_user)
-        print(f"Admin user created successfully: {admin_user.email}")
-        print(
-            f"Please login with email: {admin_email} and password provided in environment"
+        logger.info("Admin user created successfully: %s", admin_user.email)
+        logger.info(
+            "Please login with email: %s and password provided in environment",
+            admin_email,
         )
-    except Exception as e:
+    except (ValueError, IOError) as exc:
         db.rollback()
-        print(f"Error creating admin user: {str(e)}")
+        logger.error("Error creating admin user: %s", str(exc))

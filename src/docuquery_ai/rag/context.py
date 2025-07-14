@@ -1,9 +1,11 @@
-from typing import List, Any
+from typing import Any, List
+
 
 class ContextAssembler:
     """
     Assembles retrieved information into a coherent context for language models.
     """
+
     def assemble(self, results: List[Any]) -> str:
         """
         Combines a list of retrieved results into a single string context.
@@ -15,5 +17,4 @@ class ContextAssembler:
             A string representing the assembled context.
         """
         # Placeholder for context assembly logic
-        # For now, just join the results into a single string
-        return "\n".join([str(r) for r in results])
+        raise NotImplementedError("Context assembly logic is not implemented")

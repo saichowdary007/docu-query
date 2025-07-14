@@ -1,5 +1,7 @@
+from typing import Any, Dict, List
+
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+
 
 class Document(BaseModel):
     id: str
@@ -10,6 +12,7 @@ class Document(BaseModel):
     entities: List[Any]  # Replace with specific Entity model later
     relationships: List[Any]  # Replace with specific Relationship model later
     knowledge_triples: List[Any]  # Replace with specific Triple model later
+
 
 class HybridQuery(BaseModel):
     text: str

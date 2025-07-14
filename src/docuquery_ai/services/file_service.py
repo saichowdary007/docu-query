@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from datetime import datetime
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from docuquery_ai.core.config import settings
 from docuquery_ai.models.db_models import File, User
+
+logger = logging.getLogger(__name__)
 
 
 def create_file_record(
@@ -83,8 +86,8 @@ def save_uploaded_file(file_content, target_path: str) -> bool:
         with open(target_path, "wb") as buffer:
             shutil.copyfileobj(file_content, buffer)
         return True
-    except Exception as e:
-        print(f"Error saving file: {e}")
+    except (ValueError, IOError) as e:
+        logger.error("Error saving file: %s", e)
         return False
 
 
@@ -94,6 +97,6 @@ def delete_file(file_path: str) -> bool:
         if os.path.exists(file_path):
             os.remove(file_path)
         return True
-    except Exception as e:
-        print(f"Error deleting file: {e}")
+    except (ValueError, IOError) as e:
+        logger.error("Error deleting file: %s", e)
         return False

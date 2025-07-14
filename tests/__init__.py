@@ -1,1 +1,1 @@
-# Tests for DocuQuery AI package 
+# Tests for DocuQuery AI package

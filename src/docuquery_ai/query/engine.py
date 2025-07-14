@@ -1,16 +1,20 @@
 import logging
-from .aggregator import ResultAggregator
-from .cache import QueryCache
-from ..db.models import HybridQuery
-from typing import List, Any
+from typing import Any, List
+
 from docuquery_ai.exceptions import QueryError
 
+from ..db.models import HybridQuery
+from .aggregator import ResultAggregator
+from .cache import QueryCache
+
 logger = logging.getLogger(__name__)
+
 
 class QueryEngine:
     """
     Orchestrates multi-database queries, aggregates results, and manages caching.
     """
+
     def __init__(self):
         """
         Initializes the QueryEngine with a ResultAggregator and QueryCache.
@@ -51,25 +55,40 @@ class QueryEngine:
             if not query.databases or "relational" in query.databases:
                 if self.relational_db:
                     logger.debug("Querying relational database.")
-                    results.append(await self.relational_db.search_documents(query.text))
+                    results.append(
+                        await self.relational_db.search_documents(query.text)
+                    )
             if not query.databases or "vector" in query.databases:
                 if self.vector_db:
                     logger.debug("Querying vector database.")
                     # Assuming query.embeddings is populated by a prior step or passed in HybridQuery
-                    results.append(await self.vector_db.search_vectors(query_vector=[], filters=query.filters)) # Placeholder for actual query_vector
+                    results.append(
+                        await self.vector_db.search_vectors(
+                            query_vector=[], filters=query.filters
+                        )
+                    )  # Placeholder for actual query_vector
             if not query.databases or "graph" in query.databases:
                 if self.graph_db:
                     logger.debug("Querying graph database.")
-                    results.append(await self.graph_db.traverse(query.text, "")) # Placeholder for graph query
+                    results.append(
+                        await self.graph_db.traverse(query.text, "")
+                    )  # Placeholder for graph query
             if not query.databases or "knowledge_graph" in query.databases:
                 if self.knowledge_graph_db:
                     logger.debug("Querying knowledge graph database.")
-                    results.append(await self.knowledge_graph_db.query_sparql(query.text)) # Placeholder for SPARQL query
+                    results.append(
+                        await self.knowledge_graph_db.query_sparql(query.text)
+                    )  # Placeholder for SPARQL query
 
             aggregated_results = self.aggregator.aggregate(results)
             self.cache.set(str(query), aggregated_results)
             logger.info(f"Query executed successfully for: {query.text}")
             return aggregated_results
-        except Exception as e:
-            logger.error(f"Error during query execution for {query.text}: {e}", exc_info=True)
-            raise QueryError(f"Failed to execute query {query.text}: {e}") from e
+        except (ValueError, IOError) as exc:
+            logger.error(
+                "Error during query execution for %s: %s",
+                query.text,
+                exc,
+                exc_info=True,
+            )
+            raise QueryError(f"Failed to execute query {query.text}: {exc}") from exc

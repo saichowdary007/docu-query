@@ -9,14 +9,9 @@ A powerful document query system that combines RAG (Retrieval-Augmented Generati
 - **Document Processing**: Supports PDF, DOCX, PPTX, TXT, MD files
 - **Structured Data**: Handles CSV, XLS, XLSX with direct data operations
 - **Vector Search**: Automatic text chunking and embedding with FAISS
-- **Hybrid Search**: Combines semantic (vector) and keyword (BM25) search for more comprehensive retrieval.
-- **Query Transformations (HyDE)**: Uses LLMs to generate hypothetical answers for improved semantic search relevance.
-- **Re-ranking with Cross-Encoders**: Applies a second-stage re-ranking model to refine search results and improve precision.
-- **Knowledge Graph Integration (Initial)**: Extracts entities and relationships from documents to build a knowledge graph, enabling basic graph-aware querying.
-- **Natural Language Queries**: RAG for unstructured documents
-- **Google Vertex AI**: Integration with Google's LLM and embedding models
+- **Natural Language Queries**: Retrieval augmented generation over your data
 - **CLI Interface**: Command-line tool for easy document management
-- **Python API**: Clean programmatic interface for integration
+- **Python API**: Simple programmatic interface
 
 ## Installation
 
@@ -206,11 +201,13 @@ isort src/
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Documentation is built with **mkdocs-material** from the package docstrings. To contribute:
+
+1. Fork the repository and create a feature branch.
+2. Install development requirements: `pip install -e .[dev]`.
+3. Run `pre-commit install` to set up formatting hooks.
+4. Make your changes and ensure `pytest` passes.
+5. Open a Pull Request on GitHub.
 
 ## License
 

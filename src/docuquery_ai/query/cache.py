@@ -1,9 +1,11 @@
 from cachetools import TTLCache
 
+
 class QueryCache:
     """
     Implements an in-memory, time-to-live (TTL) cache for query results.
     """
+
     def __init__(self, maxsize: int = 100, ttl: int = 300):
         """
         Initializes the QueryCache.
