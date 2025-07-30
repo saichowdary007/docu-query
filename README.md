@@ -107,7 +107,7 @@ docuquery --help
 
 ## Advanced Usage
 
-
+### Custom Configuration
 
 ```python
 from docuquery_ai import DocumentQueryClient
