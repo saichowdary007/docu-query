@@ -13,7 +13,7 @@ A powerful document query system that combines RAG (Retrieval-Augmented Generati
 - **CLI Interface**: Command-line tool for easy document management
 - **Python API**: Simple programmatic interface
 
-
+## Installation
 
 Install from PyPI:
 
