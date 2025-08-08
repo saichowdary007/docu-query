@@ -1,16 +1,6 @@
-"""Core functionality for DocuQuery AI."""
+"""Lightweight core utilities for DocuQuery AI."""
 
-from .config import Settings, settings
-from .database import SessionLocal, get_db, init_db
-from .security import create_access_token, get_password_hash, verify_password
+from .config import Settings, get_settings, settings
 
-__all__ = [
-    "Settings",
-    "settings",
-    "init_db",
-    "get_db",
-    "SessionLocal",
-    "get_password_hash",
-    "verify_password",
-    "create_access_token",
-]
+__all__ = ["Settings", "get_settings", "settings"]
+

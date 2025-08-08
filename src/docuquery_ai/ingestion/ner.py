@@ -1,6 +1,9 @@
 from typing import Any, Dict, List
 
-import spacy
+try:  # pragma: no cover - optional dependency
+    import spacy
+except Exception:  # pragma: no cover - dependency not available
+    spacy = None
 
 
 class NER:
@@ -9,10 +12,15 @@ class NER:
     """
 
     def __init__(self):
-        """
-        Initializes the NER component by loading the 'en_core_web_sm' spaCy model.
-        """
-        self.nlp = spacy.load("en_core_web_sm")
+        """Load the spaCy model if the dependency is available."""
+
+        if spacy is None:
+            self.nlp = None
+        else:
+            try:
+                self.nlp = spacy.load("en_core_web_sm")
+            except Exception:  # pragma: no cover - model not installed
+                self.nlp = None
 
     async def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -25,9 +33,11 @@ class NER:
             A list of dictionaries, where each dictionary represents an extracted entity
             with its text, start and end characters, and label.
         """
+        if self.nlp is None:
+            return []
         # In a real async scenario, this might use a non-blocking model or run in a thread pool
         doc = self.nlp(text)
-        entities = []
+        entities: List[Dict[str, Any]] = []
         for ent in doc.ents:
             entities.append(
                 {
