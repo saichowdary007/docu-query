@@ -1,6 +1,9 @@
 from typing import List
 
-from sentence_transformers import SentenceTransformer
+try:  # pragma: no cover - optional dependency
+    from sentence_transformers import SentenceTransformer
+except Exception:  # pragma: no cover - dependency not available
+    SentenceTransformer = None
 
 
 class EmbeddingGenerator:
@@ -9,13 +12,12 @@ class EmbeddingGenerator:
     """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        """
-        Initializes the EmbeddingGenerator with a specified SentenceTransformer model.
+        """Initializes the generator and loads the underlying model if available."""
 
-        Args:
-            model_name: The name of the SentenceTransformer model to use.
-        """
-        self.model = SentenceTransformer(model_name)
+        if SentenceTransformer is None:
+            self.model = None
+        else:
+            self.model = SentenceTransformer(model_name)
 
     async def generate_embeddings(self, text: str) -> List[float]:
         """
@@ -28,4 +30,6 @@ class EmbeddingGenerator:
             A list of floats representing the embedding vector.
         """
         # In a real async scenario, this might use a non-blocking model or run in a thread pool
+        if self.model is None:
+            return []
         return self.model.encode(text).tolist()

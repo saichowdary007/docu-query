@@ -1,25 +1,14 @@
-"""
-DocuQuery AI - A powerful document query system using RAG and LLM technologies.
+"""Top-level package for the lightweight DocuQuery AI client."""
 
-This package provides document processing, vector storage, and natural language querying
-capabilities for PDF, DOCX, PPTX, TXT, MD, CSV, XLS, and XLSX files.
-"""
+__all__ = ["DocumentQueryClient", "Settings"]
 
 __version__ = "0.1.0"
 __author__ = "DocuQuery AI Team"
 __email__ = "contact@docuquery-ai.com"
 
-from .client import DocumentQueryClient
-from .core.config import Settings
-from .models.pydantic_models import FileProcessRequest, QueryRequest, QueryResponse
-from .models.user import UserCreate, UserResponse
+# Import minimal components to avoid pulling in heavy optional dependencies at
+# import time.  Additional modules can still be accessed via their subpackages
+# when required by applications.
+from .client import DocumentQueryClient  # noqa: E402
+from .core.config import Settings  # noqa: E402
 
-__all__ = [
-    "DocumentQueryClient",
-    "Settings",
-    "QueryRequest",
-    "QueryResponse",
-    "FileProcessRequest",
-    "UserCreate",
-    "UserResponse",
-]

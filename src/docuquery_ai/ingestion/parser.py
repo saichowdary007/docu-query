@@ -1,43 +1,49 @@
-import csv
-import os
-from typing import Any, Dict, List
+"""Utility functions for parsing different document formats.
 
-import markdown
-import pandas as pd
-from docx import Document as DocxDocument
-from pptx import Presentation
-from pypdf import PdfReader
+The original implementation imported a number of optional third‑party
+libraries at module import time.  This caused the package to fail to import
+in minimal environments where those heavy dependencies were not installed.
+
+To make the core package more lightweight and easier to test we now lazily
+import those dependencies only when the corresponding parser function is
+invoked.  Each parser raises a clear ``ImportError`` if the required library is
+missing.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Dict
 
 from docuquery_ai.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Ensure temp_uploads directory exists
 os.makedirs(settings.TEMP_UPLOAD_FOLDER, exist_ok=True)
 
 
 def parse_docx(file_path: str) -> str:
-    """
-    Parses a DOCX file and extracts its text content.
+    """Parse a DOCX file and extract its text content."""
 
-    Args:
-        file_path: The absolute path to the DOCX file.
+    try:  # pragma: no cover - optional dependency
+        from docx import Document as DocxDocument
+    except Exception as exc:  # pragma: no cover - dependency not available
+        raise ImportError("python-docx is required to parse DOCX files") from exc
 
-    Returns:
-        The extracted text content as a string.
-    """
     doc = DocxDocument(file_path)
     return "\n".join([para.text for para in doc.paragraphs])
 
 
 def parse_pptx(file_path: str) -> str:
-    """
-    Parses a PPTX file and extracts its text content from all slides.
+    """Parse a PPTX file and extract text from all slides."""
 
-    Args:
-        file_path: The absolute path to the PPTX file.
+    try:  # pragma: no cover - optional dependency
+        from pptx import Presentation
+    except Exception as exc:  # pragma: no cover - dependency not available
+        raise ImportError("python-pptx is required to parse PPTX files") from exc
 
-    Returns:
-        The extracted text content as a string.
-    """
     prs = Presentation(file_path)
     text_runs = []
     for slide in prs.slides:
@@ -51,108 +57,73 @@ def parse_pptx(file_path: str) -> str:
 
 
 def parse_pdf(file_path: str) -> str:
-    """
-    Parse PDF and extract text with robust error handling and fallback methods.
+    """Parse a PDF document and extract its textual content."""
 
-    Args:
-        file_path: Path to the PDF file
+    try:  # pragma: no cover - optional dependency
+        from pypdf import PdfReader
+    except Exception as exc:  # pragma: no cover - dependency not available
+        raise ImportError("pypdf is required to parse PDF files") from exc
 
-    Returns:
-        Extracted text content from the PDF
-    """
     try:
-        # First try the standard method
         reader = PdfReader(file_path)
 
-        # Check if the PDF is encrypted
         if reader.is_encrypted:
             try:
-                # Try with empty password (some PDFs can be accessed this way)
                 reader.decrypt("")
-                logger.warning(
-                    "Successfully decrypted PDF with empty password: %s",
-                    file_path,
-                )
-            except (ValueError, IOError) as exc:
-                logger.warning("Cannot decrypt PDF %s: %s", file_path, str(exc))
+                logger.warning("Successfully decrypted PDF with empty password: %s", file_path)
+            except Exception as exc:
+                logger.warning("Cannot decrypt PDF %s: %s", file_path, exc)
                 return f"[This PDF is encrypted and could not be processed: {os.path.basename(file_path)}]"
 
-        # Extract text from each page with better error handling
         text = ""
         for i, page in enumerate(reader.pages):
             try:
                 page_text = page.extract_text() or ""
                 text += page_text
-                # If page is empty, add a note
                 if not page_text.strip():
-                    logger.warning(
-                        "Empty or non-text content on page %s in %s",
-                        i + 1,
-                        file_path,
-                    )
-            except (ValueError, IOError) as page_e:
+                    logger.warning("Empty or non-text content on page %s in %s", i + 1, file_path)
+            except Exception as exc:
                 logger.warning(
-                    "Error extracting text from page %s in %s: %s",
-                    i + 1,
-                    file_path,
-                    str(page_e),
+                    "Error extracting text from page %s in %s: %s", i + 1, file_path, exc
                 )
                 text += f"\n[Error extracting text from page {i+1}]\n"
 
-        # If we got no text at all, try a fallback method
         if not text.strip():
-            logger.warning(
-                "No text extracted from %s. Attempting fallback method.", file_path
+            logger.warning("No text extracted from %s. Attempting fallback method.", file_path)
+            text = (
+                f"[This document appears to contain no extractable text or may be a scanned PDF: {os.path.basename(file_path)}]"
             )
-            # We could implement alternative extraction here if needed
-            # e.g., using a different library or OCR for scanned PDFs
-            text = f"[This document appears to contain no extractable text or may be a scanned PDF: {os.path.basename(file_path)}]"
 
         return text
-
-    except (ValueError, IOError) as e:
-        logger.error("Error parsing PDF %s: %s", file_path, str(e))
-        # Return a placeholder so the document's not completely lost
-        return f"[Error processing PDF document: {os.path.basename(file_path)}. Error: {str(e)}]"
+    except Exception as exc:
+        logger.error("Error parsing PDF %s: %s", file_path, exc)
+        return f"[Error processing PDF document: {os.path.basename(file_path)}. Error: {exc}]"
 
 
-def parse_csv(file_path: str) -> pd.DataFrame:
-    """
-    Parses a CSV file into a pandas DataFrame.
+def parse_csv(file_path: str):
+    """Parse a CSV file into a pandas :class:`DataFrame`."""
 
-    Args:
-        file_path: The absolute path to the CSV file.
+    import pandas as pd  # type: ignore  # pragma: no cover - optional dependency
 
-    Returns:
-        A pandas DataFrame containing the CSV data.
-    """
-    # For RAG, we might convert CSV rows to text or handle structured queries separately
     return pd.read_csv(file_path)
 
 
-def parse_excel(file_path: str) -> Dict[str, pd.DataFrame]:
-    """
-    Parses an Excel file into a dictionary of pandas DataFrames, where keys are sheet names.
+def parse_excel(file_path: str) -> Dict[str, "pd.DataFrame"]:
+    """Parse an Excel workbook into a mapping of sheet names to DataFrames."""
 
-    Args:
-        file_path: The absolute path to the Excel file.
+    import pandas as pd  # type: ignore  # pragma: no cover - optional dependency
 
-    Returns:
-        A dictionary where keys are sheet names and values are pandas DataFrames.
-    """
-    # Returns a dictionary of sheet_name: dataframe
     return pd.read_excel(file_path, sheet_name=None)
 
 
 def parse_md(file_path: str) -> str:
-    """
-    Parses a Markdown file and converts its content to HTML.
+    """Parse a Markdown file and return its HTML representation."""
 
-    Args:
-        file_path: The absolute path to the Markdown file.
+    try:  # pragma: no cover - optional dependency
+        import markdown
+    except Exception as exc:  # pragma: no cover - dependency not available
+        raise ImportError("markdown package is required to parse Markdown files") from exc
 
-    Returns:
-        The HTML content as a string.
-    """
     with open(file_path, "r", encoding="utf-8") as f:
         return markdown.markdown(f.read())
+
